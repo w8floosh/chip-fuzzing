@@ -22,6 +22,7 @@
 #include <app/util/config.h>
 #include <cstring>
 #include <utility>
+#include <vector>
 
 namespace chip {
 namespace app {
