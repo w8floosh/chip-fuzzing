@@ -367,6 +367,7 @@ CHIP_ERROR InteractiveStartCommand::RunCommand()
 
     char * command = nullptr;
     int status;
+
     while (true)
     {
         command = GetCommand(command);
@@ -399,7 +400,7 @@ bool InteractiveCommand::ParseCommand(char * command, int * status)
 
     ClearLine();
 
-    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising());
+    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising(), mExportDirectory);
 
     return true;
 }
