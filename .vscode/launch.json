@@ -403,6 +403,25 @@
         },
 
         {
+            "name": "CHIP Tool (Linux)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/debug/standalone/chip-tool",
+            "args": [
+                "pairing",
+                "ble-wifi",
+                "11",
+                "TIM-20627949",
+                "Ptdmc2CNyn3gNHqd44n7k7MT",
+                "43215808",
+                "0xab3",
+                "--bypass-attestation-verifier",
+                "true"
+            ],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
             "name": "Fabric Admin (Linux)",
             "type": "lldb",
             "request": "launch",

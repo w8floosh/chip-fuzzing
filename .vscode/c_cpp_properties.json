@@ -5,7 +5,7 @@
             "compileCommands": "${workspaceFolder}/out/debug/compile_commands.gcc.json",
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
-            "cppStandard": "gnu++17",
+            "cppStandard": "c++17",
             "intelliSenseMode": "gcc-x64",
             "browse": {
                 "path": ["${workspaceFolder}/out/debug/"],
