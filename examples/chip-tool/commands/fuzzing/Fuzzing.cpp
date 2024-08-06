@@ -1,23 +1,23 @@
-#pragma once
 #include "Fuzzing.h"
 
 namespace fuzz = chip::fuzzing;
 
 namespace {
-template <class T>
-T * GetMapElementFromKeyEnum(std::unordered_map<std::string, T> map, const char * key)
+
+std::unordered_map<std::string, fuzz::FuzzerType> fuzzerTypeMap           = { { "afl++", fuzz::FuzzerType::AFL_PLUSPLUS } };
+std::unordered_map<std::string, fuzz::FuzzingStrategy> fuzzingStrategyMap = {};
+
+template <typename T>
+T * GetMapElementFromKeyEnum(const std::unordered_map<std::string, T> & map, const char * key)
 {
-    if (key == nullptr)
-    {
-        return nullptr;
-    }
-    std::unordered_map<std::string, T>::iterator found = map.find(std::string(key));
-    if (found == map.end())
-    {
-        return nullptr;
-    }
+    VerifyOrReturnValue(std::is_enum<T>::value, nullptr);
+
+    auto found = map.find(std::string(key));
+    VerifyOrReturnValue(found != map.end(), nullptr);
+
     return &(found->second);
 }
+
 } // namespace
 
 CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, Fuzzer ** fuzzer)
@@ -35,12 +35,12 @@ CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsD
     return CHIP_NO_ERROR;
 };
 
-fuzz::FuzzerType * fuzz::ConvertStringToFuzzerType(const char * key)
+fuzz::FuzzerType * fuzz::ConvertStringToFuzzerType(char * const & key)
 {
-    return GetMapElementFromKeyEnum<FuzzerType>(fuzzerTypeMap, key);
+    return GetMapElementFromKeyEnum<fuzz::FuzzerType>(fuzzerTypeMap, key);
 }
 
-fuzz::FuzzingStrategy * fuzz::ConvertStringToFuzzingStrategy(const char * key)
+fuzz::FuzzingStrategy * fuzz::ConvertStringToFuzzingStrategy(char * const & key)
 {
-    return GetMapElementFromKeyEnum<FuzzingStrategy>(fuzzingStrategyMap, key);
+    return GetMapElementFromKeyEnum<fuzz::FuzzingStrategy>(fuzzingStrategyMap, key);
 }

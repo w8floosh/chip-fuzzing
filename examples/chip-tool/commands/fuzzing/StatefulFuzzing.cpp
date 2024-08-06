@@ -4,7 +4,7 @@ namespace fuzz = chip::fuzzing;
 
 namespace {
 template <class K, class V>
-V * GetElementPointerIfExists(std::unordered_map<K, V *> map, K id)
+V * GetElementPointerIfExists(const std::unordered_map<K, V *> & map, K id)
 {
     return map.find(id) != map.end() ? map[id] : nullptr
 }
@@ -29,15 +29,14 @@ fuzz::stateful::AttributeState<T> * fuzz::stateful::ClusterState::operator[](Att
 template <class T>
 fuzz::stateful::AttributeState<T> & fuzz::stateful::AttributeState<T>::operator=(const T & aValue)
 {
-    mPrevValue = mCurrValue;
-    mCurrValue = aValue;
+    mValue = aValue;
     return *this;
 };
 
 template <class T>
-T & fuzz::stateful::AttributeState<T>::operator()(bool current = true)
+T & fuzz::stateful::AttributeState<T>::operator()()
 {
-    return current ? mCurrValue : mPrevValue;
+    return mValue;
 }
 
 template <class T>
