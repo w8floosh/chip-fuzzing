@@ -17,6 +17,8 @@
  */
 
 #include "InteractiveCommands.h"
+#include "../fuzzing/Fuzzer.h" // take this from source code maybe?
+#include "../fuzzing/Oracle.h"
 
 #include <platform/logging/LogV.h>
 
@@ -367,13 +369,15 @@ CHIP_ERROR InteractiveStartCommand::RunCommand()
     char * command = nullptr;
     int status;
 
+    // if mFuzzingEnabled send a command to discover active clusters in the device
+    // and parse cluster attributes from source code files
+    // to initialize device state
+
     while (true)
     {
         command = GetCommand(command);
         if (command != nullptr && !ParseCommand(command, &status))
-        {
             break;
-        }
     }
 
     if (command != nullptr)
@@ -399,7 +403,7 @@ bool InteractiveCommand::ParseCommand(char * command, int * status)
 
     ClearLine();
 
-    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising(), mExportDirectory);
+    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising());
 
     return true;
 }

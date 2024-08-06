@@ -43,8 +43,7 @@ public:
         Register(commandSetName, commandsList, helpText, false);
     }
     int Run(int argc, char ** argv);
-    int RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational,
-                       const chip::Optional<char *> & exportDirectory);
+    int RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational);
 
 private:
     struct CommandSet

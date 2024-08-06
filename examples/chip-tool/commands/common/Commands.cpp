@@ -183,8 +183,7 @@ exit:
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-int Commands::RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational,
-                             const chip::Optional<char *> & exportDirectory = chip::NullOptional)
+int Commands::RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational)
 {
     std::vector<std::string> arguments;
     VerifyOrReturnValue(DecodeArgumentsFromInteractiveMode(command, arguments), EXIT_FAILURE);
@@ -211,10 +210,6 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
     ChipLogProgress(chipTool, "Command: %s", commandStr.c_str());
     auto err = RunCommand(argc, argv, true, storageDirectory, advertiseOperational);
 
-    if (err == CHIP_NO_ERROR && exportDirectory.HasValue())
-    {
-        LogErrorOnFailure(ExportCommandToFile(command, argv[1], exportDirectory.Value()));
-    }
     // Do not delete arg[0]
     for (auto i = 1; i < argc; i++)
     {
