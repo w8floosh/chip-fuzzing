@@ -37,8 +37,6 @@ public:
     {
         AddArgument("advertise-operational", 0, 1, &mAdvertiseOperational,
                     "Advertise operational node over DNS-SD and accept incoming CASE sessions.");
-        AddArgument("export-path", &mExportDirectory,
-                    "Export issued commands to the specified path, divided in sub-folders according to the type.");
     }
 
     /////////// CHIPCommand Interface /////////
@@ -50,7 +48,6 @@ public:
 private:
     Commands * mHandler = nullptr;
     chip::Optional<bool> mAdvertiseOperational;
-    chip::Optional<char *> mExportDirectory;
 };
 
 class InteractiveStartCommand : public InteractiveCommand
