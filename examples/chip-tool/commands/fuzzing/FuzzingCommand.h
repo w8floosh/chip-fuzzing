@@ -14,10 +14,10 @@ public:
         CHIPCommand(name, credsIssuerConfig, helpText), mHandler(commandsHandler)
     {
 
-        char * aFuzzerType         = nullptr;
-        char * aFuzzingStrategy    = nullptr;
-        char * aSeedDirectory      = nullptr;
-        char * aLogExportDirectory = nullptr;
+        char * aFuzzerType      = nullptr;
+        char * aFuzzingStrategy = nullptr;
+        char * aSeedDirectory   = nullptr;
+        char * aOutputDirectory = nullptr;
 
         AddArgument("fuzzer", &aFuzzerType, "Fuzzer type (afl++, ...)");
         AddArgument("fuzzing-strategy", &aFuzzingStrategy, "Fuzzing strategy");
@@ -25,39 +25,39 @@ public:
                     "Path where to read fuzzer seeds from. Also specifies where to save correct commands.");
         AddArgument("log-path", &aSeedDirectory, "Path where to export stateful fuzzer logs. Enables stateful fuzzing");
 
-        VerifyOrDieWithMsg((aFuzzerType == nullptr) == (aFuzzingStrategy == nullptr), chipTool,
+        VerifyOrDieWithMsg((aFuzzerType == nullptr) == (aFuzzingStrategy == nullptr), chipFuzzer,
                            "Both fuzzer type and strategy must be specified to enable fuzzing");
 
         fuzz::FuzzerType * kFuzzerType = fuzz::ConvertStringToFuzzerType(aFuzzerType);
-        VerifyOrDieWithMsg((aFuzzerType != nullptr) != (kFuzzerType == nullptr), chipTool,
+        VerifyOrDieWithMsg((aFuzzerType != nullptr) != (kFuzzerType == nullptr), chipFuzzer,
                            "Specified fuzzer type is not implemented");
 
         fuzz::FuzzingStrategy * kFuzzingStrategy = fuzz::ConvertStringToFuzzingStrategy(aFuzzingStrategy);
-        VerifyOrDieWithMsg((aFuzzingStrategy != nullptr) != (kFuzzingStrategy == nullptr), chipTool,
+        VerifyOrDieWithMsg((aFuzzingStrategy != nullptr) != (kFuzzingStrategy == nullptr), chipFuzzer,
                            "Specified fuzzer type is not implemented");
 
-        VerifyOrDieWithMsg(aSeedDirectory != nullptr, chipTool, "Seed path must be specified");
+        VerifyOrDieWithMsg(aSeedDirectory != nullptr, chipFuzzer, "Seed path must be specified");
 
         mSeedDirectory = fs::path(aSeedDirectory);
         free(aSeedDirectory);
-        VerifyOrDieWithMsg(fs::exists(mSeedDirectory), chipTool, "Seed path does not exist");
+        VerifyOrDieWithMsg(fs::exists(mSeedDirectory), chipFuzzer, "Seed path does not exist");
 
-        if (aLogExportDirectory != nullptr)
+        if (aOutputDirectory != nullptr)
         {
             mStatefulFuzzingEnabled = true;
-            mLogExportDirectory.SetValue(fs::path(aLogExportDirectory));
-            free(aLogExportDirectory);
-            aLogExportDirectory = nullptr;
+            mOutputDirectory.SetValue(fs::path(aOutputDirectory));
+            free(aOutputDirectory);
+            aOutputDirectory = nullptr;
         }
 
         CHIP_ERROR err;
         if (mStatefulFuzzingEnabled)
         {
-            err = fuzz::Init(*kFuzzerType, *kFuzzingStrategy, mSeedDirectory, &mFuzzer);
+            err = fuzz::stateful::Init(*kFuzzerType, *kFuzzingStrategy, mSeedDirectory, mOutputDirectory, &mFuzzer);
         }
         else
         {
-            err = fuzz::stateful::Init(*kFuzzerType, *kFuzzingStrategy, mSeedDirectory, mLogExportDirectory, &mFuzzer);
+            err = fuzz::Init(*kFuzzerType, *kFuzzingStrategy, mSeedDirectory, &mFuzzer);
         }
         if (kFuzzerType != nullptr)
         {
@@ -69,8 +69,8 @@ public:
             free(kFuzzingStrategy);
             kFuzzingStrategy = nullptr;
         }
-        free(aLogExportDirectory);
-        VerifyOrDieWithMsg(err == CHIP_NO_ERROR, chipTool, "Failed to initialize fuzzer");
+        free(aOutputDirectory);
+        VerifyOrDieWithMsg(err == CHIP_NO_ERROR, chipFuzzer, "Failed to initialize fuzzer");
     }
 
     /////////// CHIPCommand Interface /////////
@@ -84,5 +84,5 @@ private:
     chip::Optional<bool> mAdvertiseOperational;
     bool mStatefulFuzzingEnabled = false;
     fs::path mSeedDirectory;
-    chip::Optional<fs::path> mLogExportDirectory = chip::NullOptional;
+    chip::Optional<fs::path> mOutputDirectory = chip::NullOptional;
 };

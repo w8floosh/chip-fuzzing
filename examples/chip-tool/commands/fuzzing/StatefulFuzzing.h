@@ -1,8 +1,4 @@
 #include "Fuzzing.h"
-#include <app-common/zap-generated/cluster-objects.h>
-#include <lib/core/CHIPCore.h>
-#include <lib/core/CHIPError.h>
-#include <unordered_map>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -13,7 +9,10 @@ namespace stateful {
 class DeviceStateManager
 {
 public:
-    DeviceStateManager() { VerifyOrDieWithMsg(CHIP_NO_ERROR == InitDeviceState(), chipTool, "Could not initialize device state"); };
+    DeviceStateManager()
+    {
+        VerifyOrDieWithMsg(CHIP_NO_ERROR == InitDeviceState(), chipFuzzer, "Could not initialize device state");
+    };
     ~DeviceStateManager();
 
     template <class T>
@@ -30,14 +29,13 @@ template <class T>
 class AttributeState
 {
 public:
-    T & operator()(bool current = true);
+    T & operator()();
     AttributeState<T> & operator=(const T & aValue);
 
     AttributeId mAttributeId;
 
 private:
-    T * mCurrValue;
-    T * mPrevValue;
+    T * mValue;
 };
 
 struct ClusterState
@@ -69,8 +67,6 @@ public:
         fuzzing::Fuzzer(seedsDirectory, strategy), mLogExportDirectory(stateLogExportDirectory) {};
     ~Fuzzer();
 
-    CHIP_ERROR ProcessCommandExitStatus();
-
 private:
     std::unordered_map<chip::ClusterId, ClusterState> mFuzzedDeviceState;
     chip::Optional<fs::path> mLogExportDirectory;
@@ -84,6 +80,7 @@ public:
     ~AFLPlusPlus();
 
     char * GenerateCommand() override;
+    CHIP_ERROR ProcessCommandExitStatus(const char * const & command, std::any output) override;
 };
 
 CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory,

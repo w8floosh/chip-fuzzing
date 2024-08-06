@@ -1,4 +1,4 @@
-#include <any> // to remove
+#include <any>
 #include <app-common/zap-generated/cluster-objects.h>
 #include <filesystem>
 #include <lib/core/CHIPCore.h>
@@ -9,8 +9,6 @@
 namespace fs = std::filesystem;
 namespace chip {
 namespace fuzzing {
-std::unordered_map<std::string, FuzzerType> fuzzerTypeMap           = { { "afl++", FuzzerType::AFL_PLUSPLUS } };
-std::unordered_map<std::string, FuzzingStrategy> fuzzingStrategyMap = {};
 
 enum FuzzerType
 {
@@ -28,12 +26,15 @@ enum FuzzingStrategy
 class Fuzzer
 {
 public:
-    Fuzzer(fs::path seedsDirectory, FuzzingStrategy strategy) { mStrategy = strategy; };
+    Fuzzer(fs::path seedsDirectory, FuzzingStrategy strategy) : mSeedsDirectory(seedsDirectory), mStrategy(strategy) {};
     ~Fuzzer();
-    virtual char * GenerateCommand() = 0;
+
+    virtual char * GenerateCommand()                                                           = 0;
+    virtual CHIP_ERROR ProcessCommandExitStatus(const char * const & command, std::any output) = 0;
 
 private:
     FuzzingStrategy mStrategy;
+    fs::path mSeedsDirectory;
     char * Mutate(char * command);
 };
 
@@ -44,23 +45,12 @@ public:
     ~AFLPlusPlus();
 
     char * GenerateCommand() override;
+    CHIP_ERROR ProcessCommandExitStatus(const char * const & command, std::any output) override;
 };
 
 CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, Fuzzer ** fuzzer);
 
 FuzzerType * ConvertStringToFuzzerType(const char * key);
-FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key)
-{
-    if (key == nullptr)
-    {
-        return nullptr;
-    }
-    std::unordered_map<std::string, FuzzingStrategy>::iterator found = fuzzingStrategyMap.find(std::string(key));
-    if (found == fuzzingStrategyMap.end())
-    {
-        return nullptr;
-    }
-    return &(found->second);
-}
+FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key);
 } // namespace fuzzing
 } // namespace chip
