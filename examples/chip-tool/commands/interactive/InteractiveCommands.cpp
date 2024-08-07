@@ -17,9 +17,6 @@
  */
 
 #include "InteractiveCommands.h"
-#include "../fuzzing/Fuzzer.h" // take this from source code maybe?
-#include "../fuzzing/Oracle.h"
-
 #include <platform/logging/LogV.h>
 
 #include <editline.h>
