@@ -270,13 +270,11 @@ CHIP_ERROR CHIPCommand::Run()
 
     CHIP_ERROR err = StartWaiting(GetWaitDuration());
 
-    bool interactive = IsInteractive();
-    bool fuzzing     = IsFuzzing();
     if (IsInteractive())
     {
         bool timedOut;
         // Give it 2 hours to run our cleanup; that should never get hit in practice.
-        CHIP_ERROR cleanupErr = RunOnMatterQueue(RunCommandCleanup, chip::System::Clock::Seconds16(timeout), &timedOut);
+        CHIP_ERROR cleanupErr = RunOnMatterQueue(RunCommandCleanup, chip::System::Clock::Seconds16(7200), &timedOut);
         VerifyOrDie(cleanupErr == CHIP_NO_ERROR);
         VerifyOrDie(!timedOut);
     }
