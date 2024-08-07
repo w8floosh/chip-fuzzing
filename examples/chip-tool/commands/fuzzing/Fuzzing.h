@@ -1,10 +1,5 @@
-#include <any>
-#include <app-common/zap-generated/cluster-objects.h>
+#include "DeviceStateManager.h"
 #include <filesystem>
-#include <lib/core/CHIPCore.h>
-#include <lib/core/CHIPError.h>
-#include <lib/core/Optional.h>
-#include <unordered_map>
 
 namespace fs = std::filesystem;
 namespace chip {
@@ -31,11 +26,12 @@ public:
 
     virtual char * GenerateCommand()                                                           = 0;
     virtual CHIP_ERROR ProcessCommandExitStatus(const char * const & command, std::any output) = 0;
+    CHIP_ERROR InitNodeState(NodeId id, const std::any * const & nodeData);
 
 private:
     FuzzingStrategy mStrategy;
     fs::path mSeedsDirectory;
-    char * Mutate(char * command);
+    DeviceStateManager mDeviceStateManager;
 };
 
 class AFLPlusPlus : public Fuzzer

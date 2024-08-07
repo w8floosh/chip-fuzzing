@@ -8,16 +8,15 @@ std::unordered_map<std::string, fuzz::FuzzerType> fuzzerTypeMap           = { { 
 std::unordered_map<std::string, fuzz::FuzzingStrategy> fuzzingStrategyMap = {};
 
 template <typename T>
-T * GetMapElementFromKeyEnum(const std::unordered_map<std::string, T> & map, const char * key)
+T const * GetMapElementFromKeyEnum(const std::unordered_map<std::string, T> & map, const char * key)
 {
     VerifyOrReturnValue(std::is_enum<T>::value, nullptr);
 
-    auto found = map.find(std::string(key));
+    auto found = map.find(std::string(key)) const;
     VerifyOrReturnValue(found != map.end(), nullptr);
 
     return &(found->second);
 }
-
 } // namespace
 
 CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, Fuzzer ** fuzzer)
@@ -35,12 +34,16 @@ CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsD
     return CHIP_NO_ERROR;
 };
 
-fuzz::FuzzerType * fuzz::ConvertStringToFuzzerType(char * const & key)
+CHIP_ERROR fuzz::Fuzzer::InitNodeState(NodeId id, const std::any * const & nodeData)
+{
+    return CHIP_ERROR_NOT_IMPLEMENTED;
+}
+fuzz::FuzzerType const * fuzz::ConvertStringToFuzzerType(char * const & key)
 {
     return GetMapElementFromKeyEnum<fuzz::FuzzerType>(fuzzerTypeMap, key);
 }
 
-fuzz::FuzzingStrategy * fuzz::ConvertStringToFuzzingStrategy(char * const & key)
+fuzz::FuzzingStrategy const * fuzz::ConvertStringToFuzzingStrategy(char * const & key)
 {
     return GetMapElementFromKeyEnum<fuzz::FuzzingStrategy>(fuzzingStrategyMap, key);
 }
