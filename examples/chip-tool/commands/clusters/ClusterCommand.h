@@ -23,7 +23,7 @@
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 #include <lib/core/ClusterEnums.h>
 
-class ClusterCommand : public InteractionModelCommands, public ModelCommand, public chip::app::CommandSender::Callback
+class ClusterCommand : public virtual InteractionModelCommands, public ModelCommand, public chip::app::CommandSender::Callback
 {
 public:
     ClusterCommand(CredentialIssuerCommands * credsIssuerConfig) :

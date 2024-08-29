@@ -366,10 +366,6 @@ CHIP_ERROR InteractiveStartCommand::RunCommand()
     char * command = nullptr;
     int status;
 
-    // if mFuzzingEnabled send a command to discover active clusters in the device
-    // and parse cluster attributes from source code files
-    // to initialize device state
-
     while (true)
     {
         command = GetCommand(command);

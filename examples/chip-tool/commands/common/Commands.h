@@ -63,7 +63,6 @@ private:
     CommandSetMap::iterator GetCommandSet(std::string commandSetName);
     Command * GetCommand(CommandsVector & commands, std::string commandName);
     Command * GetGlobalCommand(CommandsVector & commands, std::string commandName, std::string attributeName);
-    CHIP_ERROR ExportCommandToFile(const char * command, const char * commandType, const char * baseDirectory);
     bool IsAttributeCommand(std::string commandName) const;
     bool IsEventCommand(std::string commandName) const;
     bool IsGlobalCommand(std::string commandName) const;
