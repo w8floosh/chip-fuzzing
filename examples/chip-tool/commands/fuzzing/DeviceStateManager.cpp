@@ -4,73 +4,67 @@ namespace fuzz = chip::fuzzing;
 
 namespace {
 template <class K, class V>
-V & GetElementIfExists(const std::unordered_map<K, V> & map, K id)
+V & ValueOrNull(const std::unordered_map<K, V> & map, K id)
 {
     auto found = map.find(id);
     return found != map.end() ? map[id] : nullptr
 }
 } // namespace
 
-fuzz::NodeState & fuzz::DeviceState::operator[](NodeId id)
+fuzz::NodeState & fuzz::DeviceState::operator()(NodeId id)
 {
-    return GetElementIfExists<NodeId, NodeState>(mNodes, id);
+    return ValueOrNull(nodes, id);
 }
 
-fuzz::EndpointState & fuzz::NodeState::operator[](EndpointId id)
+fuzz::EndpointState & fuzz::DeviceState::operator()(NodeId node, EndpointId endpoint)
 {
-    return GetElementIfExists<EndpointId, EndpointState>(mEndpoints, id);
+    VerifyOrReturnValue((*this)(node) != nullptr, nullptr);
+    return ValueOrNull((*this)(node).endpoints, endpoint);
 }
 
-fuzz::ClusterState & fuzz::EndpointState::operator[](ClusterId id)
+fuzz::ClusterState & fuzz::DeviceState::operator()(NodeId node, EndpointId endpoint, ClusterId cluster)
 {
-    return GetElementIfExists<ClusterId, ClusterState>(mClusters, id);
-}
-
-template <class T>
-fuzz::AttributeState<T> & fuzz::ClusterState::operator[](AttributeId id)
-{
-    return GetElementIfExists<AttributeId, AttributeState<T>>(mAttributes, id);
+    VerifyOrReturnValue((*this)(node, endpoint) != nullptr, nullptr);
+    return ValueOrNull((*this)(node, endpoint).clusters, cluster);
 }
 
 template <class T>
-fuzz::AttributeState<T> & fuzz::AttributeState<T>::operator=(const T & aValue)
+fuzz::AttributeState<T> & fuzz::DeviceState::operator()(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
-    mValue.SetValue(aValue);
-    return *this;
-};
-
-template <class T>
-T & fuzz::AttributeState<T>::operator()()
-{
-    if (mValue.HasValue())
-        return mValue;
-    return nullptr;
+    VerifyOrReturnValue((*this)(node, endpoint, cluster) != nullptr, nullptr);
+    return ValueOrNull((*this)(node, endpoint, cluster).attributes, attribute)
 }
 
 template <class T>
-T * fuzz::DeviceStateManager::GetAttribute(EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                                           bool returnPreviousValue = false)
+T * fuzz::DeviceStateManager::GetAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
+    VerifyOrReturnValue(!mDeviceState(node, endpoint, cluster, attribute), nullptr);
+    auto value = mDeviceState(node, endpoint, cluster, attribute)();
+    VerifyOrReturnValue(value != nullptr, nullptr);
+
+    using AttributeType = decltype(value);
     static_assert(std::is_same<AttributeType, T>::value, "wrong attribute type");
 
-    VerifyOrReturnValue(!mDeviceState[endpoint], nullptr);
-    VerifyOrReturnValue(!mDeviceState[endpoint][cluster], nullptr);
-    VerifyOrReturnValue(!mDeviceState[endpoint][cluster][attribute], nullptr);
-
-    auto value          = mDeviceState[endpoint][cluster][attribute]();
-    using AttributeType = decltype(value);
-    VerifyOrReturnError(value != nullptr, CHIP_ERROR_NOT_FOUND);
-
-    if (mDeviceState[endpoint][cluster][attribute](!returnPreviousValue) == nullptr)
-        return nullptr;
-    return reinterpret_cast<T *>(mDeviceState[endpoint][cluster][attribute]());
+    return reinterpret_cast<T *>(value);
 }
 
 template <class T>
-CHIP_ERROR fuzz::DeviceStateManager::SetAttribute(EndpointId endpoint, ClusterId cluster, AttributeId attribute, T value)
+CHIP_ERROR fuzz::DeviceStateManager::SetAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+                                                  T value)
 {
-    using AttributeType = decltype(mDeviceState[endpoint][cluster][attribute]());
-    VerifyOrReturnError(std::is_same<AttributeType, T>::value, CHIP_ERROR_INVALID_ARGUMENT);
-    mDeviceState[endpoint][cluster][attribute] = value;
+    VerifyOrReturnValue(!mDeviceState(node, endpoint, cluster, attribute), nullptr);
+    auto value = mDeviceState(node, endpoint, cluster, attribute)();
+    VerifyOrReturnValue(value != nullptr, nullptr);
+
+    using AttributeType = decltype(value);
+    static_assert(std::is_same<AttributeType, T>::value, "wrong attribute type");
+    mDeviceState(node, endpoint, cluster, attribute) = value;
     return CHIP_NO_ERROR;
+}
+
+std::unordered_map<chip::ClusterId, fuzz::ClusterState> * fuzz::DeviceStateManager::GetEndpointClusters(NodeId node,
+                                                                                                        EndpointId endpoint)
+{
+    VerifyOrReturnValue(!mDeviceState(node, endpoint), nullptr);
+    return &mDeviceState(node, endpoint).clusters;
 }

@@ -37,7 +37,9 @@
 namespace {
 
 char kInteractiveModeName[]                         = "";
+char kFuzzingModeName[]                             = "";
 constexpr size_t kInteractiveModeArgumentsMaxLength = 32;
+constexpr size_t kFuzzingModeArgumentsMaxLength     = kInteractiveModeArgumentsMaxLength;
 constexpr char kOptionalArgumentPrefix[]            = "--";
 constexpr char kJsonClusterKey[]                    = "cluster";
 constexpr char kJsonCommandKey[]                    = "command";
@@ -149,6 +151,23 @@ static void DetectAndLogMismatchedDoubleQuotes(int argc, char ** argv)
     }
 }
 
+void ParseCommandString(const char * command, int * argc, char ** argv)
+{
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    *argc = tokens.size();
+    for (int i = 0; i < *argc; i++)
+    {
+        argv[i] = new char[tokens[i].size() + 1];
+        strcpy(argv[i], tokens[i].c_str());
+    }
+}
 } // namespace
 
 void Commands::Register(const char * commandSetName, commands_list commandsList, const char * helpText, bool isCluster)
@@ -219,8 +238,27 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
+int Commands::RunFuzzing(const char * command)
+{
+    int * argc;
+    char ** argv;
+
+    ParseCommandString(command, argc, argv);
+    ChipLogProgress(chipTool, "Command: %s", command);
+    auto err = RunCommand(*argc, argv, true, chip::NullOptional, false, true);
+
+    // Do not delete arg[0]
+    for (auto i = 1; i < *argc; i++)
+    {
+        delete[] argv[i];
+    }
+
+    return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,
-                                const chip::Optional<char *> & interactiveStorageDirectory, bool interactiveAdvertiseOperational)
+                                const chip::Optional<char *> & interactiveStorageDirectory, bool interactiveAdvertiseOperational,
+                                bool fuzzing)
 {
     Command * command = nullptr;
 
@@ -309,6 +347,10 @@ CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,
     if (interactive)
     {
         return command->RunAsInteractive(interactiveStorageDirectory, interactiveAdvertiseOperational);
+    }
+    else if (fuzzing)
+    {
+        return command->RunAsFuzzing();
     }
 
     // Now that the command is initialized, get our storage from it as needed

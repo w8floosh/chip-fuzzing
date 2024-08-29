@@ -10,12 +10,12 @@ namespace fuzzing {
 enum FuzzerType
 {
     AFL_PLUSPLUS,
-    Y,
+    SEED_ONLY,
     Z
 };
 enum FuzzingStrategy
 {
-    A,
+    NONE,
     B,
     C
 };
@@ -32,37 +32,27 @@ public:
 
     ~Fuzzer();
 
-    virtual char * GenerateCommand() = 0;
+    virtual const char * GenerateCommand() = 0;
     void ProcessCommandOutput(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path, CHIP_ERROR error,
                               CHIP_ERROR expectedError, const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus);
     void ProcessCommandOutput(CHIP_ERROR error, CHIP_ERROR expectedError);
-    CHIP_ERROR InitNodeState(NodeId id, std::any *& nodeData);
+    DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
 
 protected:
+    fs::path mSeedsDirectory;
+    Optional<fs::path> mOutputDirectory = NullOptional;
+    DeviceStateManager mDeviceStateManager;
+    Oracle mOracle;
+
     // TODO: Should the fuzzer log oracle outputs too?
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteCommandPath & dataModelPath);
 
 private:
     FuzzingStrategy mStrategy;
-    fs::path mSeedsDirectory;
-    Optional<fs::path> mOutputDirectory = NullOptional;
-    DeviceStateManager mDeviceStateManager;
-    Oracle mOracle;
-};
-
-class AFLPlusPlus : public Fuzzer
-{
-public:
-    AFLPlusPlus(fs::path seedsDirectory, FuzzingStrategy strategy) : Fuzzer(seedsDirectory, strategy) {};
-    AFLPlusPlus(fs::path seedsDirectory, FuzzingStrategy strategy, fs::path outputDirectory) :
-        Fuzzer(seedsDirectory, strategy, outputDirectory) {};
-
-    ~AFLPlusPlus();
-
-    char * GenerateCommand() override;
 };
 
 CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, Fuzzer ** fuzzer);
+CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, fs::path outputDirectory, Fuzzer ** fuzzer);
 
 FuzzerType * ConvertStringToFuzzerType(const char * key);
 FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key);
