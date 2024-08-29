@@ -1,5 +1,5 @@
 #pragma once
-#include "Fuzzing.h"
+#include "Fuzzers.h"
 #include <lib/support/jsontlv/TlvJson.h>
 
 namespace fuzz = chip::fuzzing;
@@ -26,13 +26,23 @@ CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsD
     switch (type)
     {
     case AFL_PLUSPLUS:
-        *fuzzer = new AFLPlusPlus(seedsDirectory, strategy);
+        *fuzzer = new fuzz::wrappers::AFLPlusPlus(seedsDirectory, strategy);
+        break;
+    case SEED_ONLY:
+        // strategy is ignored
+        *fuzzer = new fuzz::wrappers::SeedOnly(seedsDirectory);
         break;
     default:
         return CHIP_ERROR_NOT_IMPLEMENTED;
         break;
     }
 
+    return CHIP_NO_ERROR;
+};
+CHIP_ERROR fuzz::Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, fs::path outputDirectory,
+                      Fuzzer ** fuzzer)
+{
+    Init(type, strategy, seedsDirectory, outputDirectory, fuzzer);
     return CHIP_NO_ERROR;
 };
 
@@ -85,10 +95,6 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::Fuzzer::InitNodeState(NodeId id, std::any *& nodeData)
-{
-    return CHIP_ERROR_NOT_IMPLEMENTED;
-}
 const fuzz::FuzzerType * fuzz::ConvertStringToFuzzerType(const char *& key)
 {
     return GetMapElementFromKeyEnum<fuzz::FuzzerType>(fuzzerTypeMap, key);
