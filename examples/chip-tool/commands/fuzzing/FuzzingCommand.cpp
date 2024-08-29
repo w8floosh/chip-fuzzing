@@ -21,7 +21,7 @@ void split(const std::string & s, char delim, const char ** output)
 namespace fuzz = chip::fuzzing;
 
 CHIP_ERROR
-FuzzingCommand::RetrieveNodeDescription(NodeId id, fuzz::NodeDataRaw * const & description)
+FuzzingCommand::RetrieveNodeDescription(NodeId id, fuzz::NodeDataRaw *& description)
 {
 
     int * status;
