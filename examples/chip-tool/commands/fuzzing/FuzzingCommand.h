@@ -2,7 +2,6 @@
 #include "../common/CHIPCommand.h"
 #include "../common/Commands.h"
 #include "Fuzzing.h"
-#include "StatefulFuzzing.h"
 
 namespace fuzz = chip::fuzzing;
 
@@ -86,5 +85,5 @@ private:
     fs::path mSeedDirectory;
     chip::Optional<fs::path> mOutputDirectory = chip::NullOptional;
 
-    CHIP_ERROR RetrieveNodeDescription(NodeId node, fuzz::NodeDataRaw * const & description);
+    CHIP_ERROR RetrieveNodeDescription(NodeId node, fuzz::NodeDataRaw *& description);
 };

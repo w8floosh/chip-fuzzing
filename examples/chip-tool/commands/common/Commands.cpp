@@ -373,39 +373,6 @@ Command * Commands::GetGlobalCommand(CommandsVector & commands, std::string comm
     return nullptr;
 }
 
-CHIP_ERROR Commands::ExportCommandToFile(const char * command, const char * commandType, const char * baseDirectory)
-{
-    namespace fs = std::filesystem;
-
-    auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-    // Create seed hash from current timestamp
-    std::hash<std::string> hasher;
-    size_t hashedValue = hasher(std::to_string(now_ms.count()));
-
-    std::string fileName(std::to_string(hashedValue)); // Convert hash to hex string
-
-    fs::path exportDirectory = fs::path(baseDirectory) / commandType;
-    // Insert the command in the file at path "seeds/<command_type>/<hashedValue>"
-    if (!fs::exists(exportDirectory))
-    {
-        VerifyOrReturnError(!fs::create_directories(exportDirectory), CHIP_ERROR_WRITE_FAILED);
-    }
-
-    auto fd = fopen((exportDirectory / fileName).c_str(), "w");
-    VerifyOrReturnError(nullptr != fd, CHIP_ERROR_WRITE_FAILED);
-
-    fwrite(command, sizeof(char), strlen(command), fd);
-
-    auto rv = fclose(fd);
-    VerifyOrReturnError(EOF != rv, CHIP_ERROR_INTERNAL);
-
-    ChipLogProgress(chipTool, "Logged well-formed command: %s", command);
-
-    return CHIP_NO_ERROR;
-}
-
 bool Commands::IsAttributeCommand(std::string commandName) const
 {
     return commandName.compare("read") == 0 || commandName.compare("write") == 0 || commandName.compare("force-write") == 0 ||
