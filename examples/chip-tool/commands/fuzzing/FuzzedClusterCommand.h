@@ -1,19 +1,23 @@
+#pragma once
+
 #include "../clusters/ClusterCommand.h"
 #include "Fuzzing.h"
 #include "Oracle.h"
 
-class FuzzedClusterCommand : public ClusterCommand, public virtual InteractionModelCommands
+class FuzzedClusterCommand : public ClusterCommand
 {
 public:
     FuzzedClusterCommand(CredentialIssuerCommands * credsIssuerConfig, CHIP_ERROR expectedError, chip::app::StatusIB expectedStatus,
                          chip::fuzzing::Fuzzer & fuzzer) :
-        ClusterCommand(credsIssuerConfig), InteractionModelCommands(this), mExpectedError(expectedError),
-        mExpectedStatus(expectedStatus), mFuzzer(fuzzer)
-    {}
+        ClusterCommand(credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus), mFuzzer(fuzzer)
+    {
+        mCallback = this;
+    }
 
     FuzzedClusterCommand(chip::ClusterId clusterId, CredentialIssuerCommands * credsIssuerConfig, CHIP_ERROR expectedError,
-                         chip::fuzzing::Fuzzer & fuzzer) :
-        ClusterCommand(clusterId, credsIssuerConfig), InteractionModelCommands(this), mExpectedError(expectedError), mFuzzer(fuzzer)
+                         chip::app::StatusIB expectedStatus, chip::fuzzing::Fuzzer & fuzzer) :
+        ClusterCommand(clusterId, credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus),
+        mFuzzer(fuzzer)
     {}
 
     ~FuzzedClusterCommand() {}
@@ -25,14 +29,15 @@ public:
 protected:
     FuzzedClusterCommand(char * commandName, CredentialIssuerCommands * credsIssuerConfig, CHIP_ERROR expectedError,
                          chip::app::StatusIB expectedStatus, chip::fuzzing::Fuzzer & fuzzer) :
-        ClusterCommand(credsIssuerConfig), InteractionModelCommands(this), mExpectedStatus(expectedStatus),
-        mExpectedError(expectedError), mFuzzer(fuzzer)
+        ClusterCommand(credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus), mFuzzer(fuzzer)
     {
+        mCallback = this;
         // Subclasses are responsible for calling AddArguments.
     }
-    // TODO: Add protected constructor called when command is specified by name as in ClusterCommand
+    // TODO: Fix protected constructor called when command is specified by name as in ClusterCommand
+
 private:
-    CHIP_ERROR mExpectedError = CHIP_NO_ERROR;
+    CHIP_ERROR mExpectedError;
     chip::app::StatusIB mExpectedStatus;
     chip::fuzzing::Fuzzer & mFuzzer;
 };

@@ -161,11 +161,11 @@ void ParseCommandString(const char * command, int * argc, char ** argv)
         tokens.push_back(token);
     }
 
-    *argc = tokens.size();
-    for (int i = 0; i < *argc; i++)
+    argv[(*argc)++] = kFuzzingModeName;
+    for (std::string & tk : tokens)
     {
-        argv[i] = new char[tokens[i].size() + 1];
-        strcpy(argv[i], tokens[i].c_str());
+        argv[*argc] = new char[tk.size() + 1];
+        strcpy(argv[(*argc)++], tk.c_str());
     }
 }
 } // namespace
@@ -240,15 +240,15 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
 
 int Commands::RunFuzzing(const char * command)
 {
-    int * argc;
-    char ** argv;
+    int argc                                    = 0;
+    char * argv[kFuzzingModeArgumentsMaxLength] = {};
+    ParseCommandString(command, &argc, argv);
 
-    ParseCommandString(command, argc, argv);
     ChipLogProgress(chipTool, "Command: %s", command);
-    auto err = RunCommand(*argc, argv, true, chip::NullOptional, false, true);
+    auto err = RunCommand(argc, argv, true, chip::NullOptional, false, true);
 
     // Do not delete arg[0]
-    for (auto i = 1; i < *argc; i++)
+    for (auto i = 1; i < argc; i++)
     {
         delete[] argv[i];
     }
