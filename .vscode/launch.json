@@ -407,7 +407,15 @@
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/out/debug/standalone/chip-tool",
-            "args": ["interactive", "start"],
+            "args": [
+                "fuzzing",
+                "start",
+                "seed_only",
+                "chip-tool-seeds/",
+                "none",
+                "--iterations",
+                "2000"
+            ],
             "cwd": "${workspaceFolder}"
         },
 

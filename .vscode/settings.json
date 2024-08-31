@@ -155,7 +155,8 @@
         "typeindex": "cpp",
         "valarray": "cpp",
         "netfwd": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "*.inc": "cpp"
     },
     // Configure paths or glob patterns to exclude from file watching.
     "files.watcherExclude": {

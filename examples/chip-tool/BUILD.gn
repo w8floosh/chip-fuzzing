@@ -97,6 +97,31 @@ static_library("chip-tool-utils") {
     ]
   }
 
+  if (config_use_fuzzing) {
+    sources += [
+      "commands/fuzzing/Commands.h",
+      "commands/fuzzing/DeviceStateManager.cpp",
+      "commands/fuzzing/DeviceStateManager.h",
+      "commands/fuzzing/Error.h",
+      "commands/fuzzing/FuzzedClusterCommand.cpp",
+      "commands/fuzzing/FuzzedClusterCommand.h",
+      "commands/fuzzing/FuzzedReportCommand.cpp",
+      "commands/fuzzing/FuzzedReportCommand.h",
+      "commands/fuzzing/Fuzzers.cpp",
+      "commands/fuzzing/Fuzzers.h",
+      "commands/fuzzing/Fuzzing.cpp",
+      "commands/fuzzing/Fuzzing.h",
+      "commands/fuzzing/FuzzingCommands.cpp",
+      "commands/fuzzing/FuzzingCommands.h",
+      "commands/fuzzing/Oracle.h",
+    ]
+    deps += [
+      "${chip_root}/examples/common/websocket-server",
+      "${chip_root}/src/platform/logging:headers",
+      "${editline_root}:editline",
+    ]
+  }
+
   if (chip_device_platform == "darwin") {
     sources += [ "commands/common/DeviceScanner.cpp" ]
   }

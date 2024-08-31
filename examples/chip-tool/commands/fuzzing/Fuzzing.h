@@ -1,4 +1,6 @@
+#pragma once
 #include "DeviceStateManager.h"
+#include "Error.h"
 #include "Oracle.h"
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 #include <filesystem>
@@ -29,8 +31,7 @@ public:
     {
         mOutputDirectory.SetValue(outputDirectory);
     };
-
-    ~Fuzzer();
+    virtual ~Fuzzer() = default;
 
     virtual const char * GenerateCommand() = 0;
     void ProcessCommandOutput(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path, CHIP_ERROR error,
@@ -51,10 +52,7 @@ private:
     FuzzingStrategy mStrategy;
 };
 
-CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, Fuzzer ** fuzzer);
-CHIP_ERROR Init(FuzzerType type, FuzzingStrategy strategy, fs::path seedsDirectory, fs::path outputDirectory, Fuzzer ** fuzzer);
-
-FuzzerType * ConvertStringToFuzzerType(const char * key);
-FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key);
+const FuzzerType * ConvertStringToFuzzerType(const char * key);
+const FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key);
 } // namespace fuzzing
 } // namespace chip

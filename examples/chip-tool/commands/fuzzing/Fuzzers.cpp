@@ -11,6 +11,7 @@ const char * fuzzers::SeedOnly::GenerateCommand()
 {
     std::vector<std::string> files;
 
+    VerifyOrDie(std::filesystem::exists(mSeedsDirectory));
     // Read all file names from the seed directory
     for (const auto & entry : std::filesystem::directory_iterator(mSeedsDirectory))
     {
@@ -23,7 +24,7 @@ const char * fuzzers::SeedOnly::GenerateCommand()
     // Select a random file from the list
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, files.size() - 1);
+    std::uniform_int_distribution<> dis(0, (int) files.size() - 1);
     std::string randomFile = files[dis(gen)];
 
     // Read the first line from the random file

@@ -27,10 +27,7 @@ void registerCommandsFuzzing(Commands & commands, CredentialIssuerCommands * cre
     const char * clusterName = "fuzzing";
 
     commands_list clusterCommands = {
-#ifndef CONFIG_USE_INTERACTIVE_MODE
-        make_unique<FuzzingCommand>(&commands, credsIssuerConfig),
         make_unique<FuzzingStartCommand>(&commands, credsIssuerConfig),
-#endif // CONFIG_USE_INTERACTIVE_MODE
     };
 
     commands.RegisterCommandSet(clusterName, clusterCommands, "Commands for starting fuzzing process.");

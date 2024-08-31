@@ -1,3 +1,4 @@
+#pragma once
 #include "Fuzzing.h"
 
 namespace chip {
@@ -10,7 +11,7 @@ public:
     AFLPlusPlus(fs::path seedsDirectory, FuzzingStrategy strategy, fs::path outputDirectory) :
         Fuzzer(seedsDirectory, strategy, outputDirectory) {};
 
-    ~AFLPlusPlus();
+    ~AFLPlusPlus() {};
 
     const char * GenerateCommand() override;
 };
@@ -21,7 +22,7 @@ public:
     SeedOnly(fs::path seedsDirectory) : Fuzzer(seedsDirectory, NONE) {};
     SeedOnly(fs::path seedsDirectory, fs::path outputDirectory) : Fuzzer(seedsDirectory, NONE, outputDirectory) {};
 
-    ~SeedOnly();
+    ~SeedOnly() {};
 
     const char * GenerateCommand() override;
 };
