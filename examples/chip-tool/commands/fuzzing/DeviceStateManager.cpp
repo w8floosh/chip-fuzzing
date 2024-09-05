@@ -165,7 +165,3 @@ auto & fuzz::DeviceStateManager::ResetState(NodeId node, EndpointId endpoint, Cl
     mDeviceState(node, endpoint)->clusters.emplace(cluster, state);
     return deviceConfig.Reset(node, endpoint, cluster);
 }
-
-template <typename State, typename... Ks>
-auto & fuzz::DeviceStateManager::ResetState(const Ks &... ids)
-{}

@@ -30,7 +30,10 @@ void fuzz::Fuzzer::ProcessCommandOutput(chip::TLV::TLVReader * data, const chip:
         return;
     {
         chip::TLV::TLVReader outputReader;
+        Json::Value json;
         outputReader.Init(*data);
+        TlvToJson(outputReader, json);
+        std::cout << JsonToString(json) << std::endl;
 
         // TODO: Manually parse the TLV data and call mOracle.Consume() on every attribute/path scanned
         // TODO: For each error, log a line showing command, error type and error description
