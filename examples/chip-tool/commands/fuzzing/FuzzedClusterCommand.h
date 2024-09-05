@@ -12,13 +12,17 @@ public:
         ClusterCommand(credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus), mFuzzer(fuzzer)
     {
         mCallback = this;
+        ResetOptions();
     }
 
     FuzzedClusterCommand(chip::ClusterId clusterId, CredentialIssuerCommands * credsIssuerConfig, CHIP_ERROR expectedError,
                          chip::app::StatusIB expectedStatus, chip::fuzzing::Fuzzer & fuzzer) :
         ClusterCommand(clusterId, credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus),
         mFuzzer(fuzzer)
-    {}
+    {
+        mCallback = this;
+        ResetOptions();
+    }
 
     ~FuzzedClusterCommand() {}
 
@@ -32,9 +36,8 @@ protected:
         ClusterCommand(credsIssuerConfig), mExpectedError(expectedError), mExpectedStatus(expectedStatus), mFuzzer(fuzzer)
     {
         mCallback = this;
-        // Subclasses are responsible for calling AddArguments.
+        ResetOptions();
     }
-    // TODO: Fix protected constructor called when command is specified by name as in ClusterCommand
 
 private:
     CHIP_ERROR mExpectedError;

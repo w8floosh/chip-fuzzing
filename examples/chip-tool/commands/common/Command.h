@@ -276,9 +276,11 @@ public:
         mAdvertiseOperational = advertiseOperational;
         return Run();
     }
-    CHIP_ERROR RunAsFuzzing()
+    CHIP_ERROR RunAsFuzzing(const chip::Optional<char *> & interactiveStorageDirectory)
     {
-        mIsFuzzing = true;
+        mStorageDirectory = interactiveStorageDirectory;
+        mIsInteractive    = true;
+        mIsFuzzing        = true;
         return Run();
     }
     const chip::Optional<char *> & GetStorageDirectory() const { return mStorageDirectory; }
