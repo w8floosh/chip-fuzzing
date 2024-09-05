@@ -7,6 +7,8 @@ inline constexpr char kRetrieveDeviceTypeCommand[] =
     "descriptor read device-type-list "; // returns device type for each endpoint of the node
 inline constexpr char kRetrievePartsCommand[]          = "descriptor read parts-list ";  // returns endpoints of the node
 inline constexpr char kRetrieveServerClustersCommand[] = "descriptor read server-list "; // returns clusters of all endpoints
+inline constexpr char kSubscribeAllSubCommand[] =
+    "any subscribe-all 0xffffffff 0xffffffff 0xffffffff "; // subscribes to all attributes
 } // namespace
 
 namespace fuzz = chip::fuzzing;
@@ -21,27 +23,29 @@ FuzzingStartCommand::RetrieveNodeDescription(NodeId id)
 {
 
     int status = 0;
-    std::string command;
+    const char * retrievalCommands[]{ kRetrievePartsCommand, kRetrieveDeviceTypeCommand, kRetrieveServerClustersCommand };
+
+    for (auto commandType : retrievalCommands)
+    {
+        std::ostringstream command;
+        command << commandType << std::to_string(id) << " 0xffff";
+        ExecuteCommand(command.str().c_str(), &status);
+        VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    }
+
+    return CHIP_NO_ERROR;
+}
+
+CHIP_ERROR FuzzingStartCommand::SubscribeAll(NodeId node)
+{
+    int status = 0;
     std::string commandType;
+    std::ostringstream command;
 
-    // Get node endpoints
-    commandType = kRetrievePartsCommand;
-    command     = commandType.append(std::to_string(id)).append(" 0xffff");
-    ExecuteCommand(command.c_str(), &status);
+    commandType = kSubscribeAllSubCommand;
+    command << commandType << "0 5 " << std::to_string(node) << " 0";
+    ExecuteCommand(command.str().c_str(), &status);
     VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-    // Get device type for each endpoint
-    commandType = kRetrieveDeviceTypeCommand;
-    command     = commandType.append(std::to_string(id).append(" 0xffff"));
-    ExecuteCommand(command.c_str(), &status);
-    VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-    // Return server clusters for each endpoint
-    commandType = kRetrieveServerClustersCommand;
-    command     = commandType.append(std::to_string(id).append(" 0xffff"));
-    ExecuteCommand(command.c_str(), &status);
-    VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
     return CHIP_NO_ERROR;
 }
 
@@ -94,24 +98,27 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
 
     // TODO: get dynamic node id from command line
     // Retrieve device configuration using Descriptor cluster and initialize the state
-    RetrieveNodeDescription(0);
+    RetrieveNodeDescription(0xB);
+    SubscribeAll(0xB);
+    int status = 0;
+    ExecuteCommand("onoff on 0xb 1", &status);
     // Get all cluster states for the node i at endpoint j
-    auto * clustersMap = mFuzzer->GetDeviceStateManager()->GetClustersOnEndpoint(0, 0);
-    VerifyOrReturnError(clustersMap != nullptr, CHIP_ERROR_INTERNAL);
+    // auto * clustersMap = mFuzzer->GetDeviceStateManager()->GetClustersOnEndpoint(0Xb, 0);
+    // VerifyOrReturnError(clustersMap != nullptr, CHIP_ERROR_INTERNAL);
 
-    // Run the fuzzer: execute mIterations commands for each cluster
-    for (uint32_t i = 0U; i < mIterations.Value(); i++)
-    {
-        for (auto cluster : *clustersMap)
-        {
-            int status                = 0;
-            chip::ClusterId clusterId = cluster.first;
+    // // Run the fuzzer: execute mIterations commands for each cluster
+    // for (uint32_t i = 0U; i < mIterations.Value(); i++)
+    // {
+    //     for (auto cluster : *clustersMap)
+    //     {
+    //         int status                = 0;
+    //         chip::ClusterId clusterId = cluster.first;
 
-            const char * command = GenerateCommand(clusterId); // cluster.first = cluster ID
-            ExecuteCommand(command, &status);
-            VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_UNEXPECTED_ERROR);
-        }
-    }
+    //         const char * command = GenerateCommand(clusterId); // cluster.first = cluster ID
+    //         ExecuteCommand(command, &status);
+    //         VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_UNEXPECTED_ERROR);
+    //     }
+    // }
 
     SetCommandExitStatus(CHIP_NO_ERROR);
     return CHIP_NO_ERROR;

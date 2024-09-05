@@ -403,7 +403,16 @@
         },
 
         {
-            "name": "CHIP Tool (Linux)",
+            "name": "CHIP Tool Interactive (Linux)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/debug/standalone/chip-tool",
+            "args": ["interactive", "start"],
+            "cwd": "${workspaceFolder}"
+        },
+
+        {
+            "name": "CHIP Tool Fuzzing (Linux)",
             "type": "lldb",
             "request": "launch",
             "program": "${workspaceFolder}/out/debug/standalone/chip-tool",
@@ -411,8 +420,8 @@
                 "fuzzing",
                 "start",
                 "seed_only",
-                "chip-tool-seeds/",
                 "none",
+                "seeds",
                 "--iterations",
                 "2000"
             ],

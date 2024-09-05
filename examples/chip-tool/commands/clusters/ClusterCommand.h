@@ -108,6 +108,7 @@ public:
     virtual void OnResponse(chip::app::CommandSender * client, const chip::app::ConcreteCommandPath & path,
                             const chip::app::StatusIB & status, chip::TLV::TLVReader * data) override
     {
+        // TODO: Can we edit this to send the response to the fuzzer?
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {

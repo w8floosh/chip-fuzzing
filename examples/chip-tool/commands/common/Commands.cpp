@@ -346,11 +346,11 @@ CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,
 
     if (interactive)
     {
+        if (fuzzing)
+        {
+            return command->RunAsFuzzing(interactiveStorageDirectory);
+        }
         return command->RunAsInteractive(interactiveStorageDirectory, interactiveAdvertiseOperational);
-    }
-    else if (fuzzing)
-    {
-        return command->RunAsFuzzing();
     }
 
     // Now that the command is initialized, get our storage from it as needed
