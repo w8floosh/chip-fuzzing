@@ -278,9 +278,9 @@ public:
     }
     CHIP_ERROR RunAsFuzzing(const chip::Optional<char *> & interactiveStorageDirectory)
     {
-        mStorageDirectory = interactiveStorageDirectory;
-        mIsInteractive    = true;
-        mIsFuzzing        = true;
+        mStorageDirectory     = interactiveStorageDirectory;
+        mIsFuzzing            = true;
+        mAdvertiseOperational = false;
         return Run();
     }
     const chip::Optional<char *> & GetStorageDirectory() const { return mStorageDirectory; }

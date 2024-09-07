@@ -21,7 +21,6 @@ void FuzzingCommand::ExecuteCommand(const char * command, int * status)
 CHIP_ERROR
 FuzzingStartCommand::RetrieveNodeDescription(NodeId id)
 {
-
     int status = 0;
     const char * retrievalCommands[]{ kRetrievePartsCommand, kRetrieveDeviceTypeCommand, kRetrieveServerClustersCommand };
 
@@ -51,59 +50,47 @@ CHIP_ERROR FuzzingStartCommand::SubscribeAll(NodeId node)
 
 CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
 {
-    const fuzz::FuzzerType * kFuzzerType = fuzz::ConvertStringToFuzzerType(mFuzzerTypeArgument);
-    VerifyOrReturnError(kFuzzerType != nullptr, CHIP_FUZZER_ERROR_NOT_IMPLEMENTED);
-
-    const fuzz::FuzzingStrategy * kFuzzingStrategy = *kFuzzerType == fuzz::FuzzerType::SEED_ONLY
-        ? fuzz::ConvertStringToFuzzingStrategy("none")
-        : fuzz::ConvertStringToFuzzingStrategy(mFuzzingStrategyArgument);
-
-    VerifyOrReturnError(kFuzzingStrategy != nullptr, CHIP_FUZZER_ERROR_NOT_IMPLEMENTED);
+    std::function<const char *(fs::path)> kGenerationFunc = fuzz::ConvertStringToGenerationFunction(mGenerationFuncArgument);
+    VerifyOrReturnError(kGenerationFunc != nullptr, CHIP_FUZZER_ERROR_NOT_IMPLEMENTED);
 
     mSeedDirectory = fs::path(mSeedDirectoryArgument);
-    VerifyOrReturnError(fs::exists(mSeedDirectory), CHIP_FUZZER_FILESYSTEM_ERROR);
+    if (!fs::exists(mSeedDirectory))
+    {
+        VerifyOrReturnError(fs::create_directory(mSeedDirectory), CHIP_FUZZER_FILESYSTEM_ERROR);
+    }
 
     if (mOutputDirectoryArgument.HasValue())
     {
         mStatefulFuzzingEnabled = true;
         mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument.Value()));
         VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_FILESYSTEM_ERROR);
+        fuzz::Fuzzer::Initialize(mSeedDirectory, kGenerationFunc, mOutputDirectory.Value());
+    }
+    else
+    {
+        fuzz::Fuzzer::Initialize(mSeedDirectory, kGenerationFunc);
     }
 
-    // Fuzzer instance initialization
-    switch (*kFuzzerType)
-    {
-    case fuzz::FuzzerType::AFL_PLUSPLUS:
-        mFuzzer = new fuzz::wrappers::AFLPlusPlus(mSeedDirectory, *kFuzzingStrategy);
-        break;
-    case fuzz::FuzzerType::SEED_ONLY:
-        // strategy is ignored
-        mFuzzer = new fuzz::wrappers::SeedOnly(mSeedDirectory);
-        break;
-    default:
-        return CHIP_FUZZER_ERROR_NOT_IMPLEMENTED;
-        break;
-    };
+    kGenerationFunc = nullptr;
 
-    kFuzzerType      = nullptr;
-    kFuzzingStrategy = nullptr;
-
-    VerifyOrReturnError(mFuzzer != nullptr, CHIP_FUZZER_ERROR_INITIALIZATION_FAILED);
+    VerifyOrReturnError(fuzz::Fuzzer::GetInstance() != nullptr, CHIP_FUZZER_ERROR_INITIALIZATION_FAILED);
     return CHIP_NO_ERROR;
 }
 
 CHIP_ERROR FuzzingStartCommand::RunCommand()
 {
-    InitializeFuzzer();
-
+    CHIP_ERROR err               = InitializeFuzzer();
+    const char * kExampleCommand = "onoff on ";
+    VerifyOrReturnError(CHIP_NO_ERROR == err, err);
     // TODO: get dynamic node id from command line
     // Retrieve device configuration using Descriptor cluster and initialize the state
-    RetrieveNodeDescription(0xB);
-    SubscribeAll(0xB);
+    VerifyOrReturnError(CHIP_NO_ERROR == RetrieveNodeDescription(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    // VerifyOrReturnError(CHIP_NO_ERROR == SubscribeAll(0xB), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+
     int status = 0;
-    ExecuteCommand("onoff on 0xb 1", &status);
+    ExecuteCommand(std::string(kExampleCommand).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
     // Get all cluster states for the node i at endpoint j
-    // auto * clustersMap = mFuzzer->GetDeviceStateManager()->GetClustersOnEndpoint(0Xb, 0);
+    // auto * clustersMap = mFuzzer->GetDeviceStateManager()->GetClustersOnEndpoint(0xB, 0);
     // VerifyOrReturnError(clustersMap != nullptr, CHIP_ERROR_INTERNAL);
 
     // // Run the fuzzer: execute mIterations commands for each cluster
@@ -126,5 +113,7 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
 
 const char * FuzzingStartCommand::GenerateCommand(chip::ClusterId cluster)
 {
-    return mFuzzer->GenerateCommand();
+    fuzz::Fuzzer * fuzzer = fuzz::Fuzzer::GetInstance();
+    VerifyOrReturnError(fuzzer != nullptr, nullptr);
+    return fuzzer->GenerateCommand();
 };

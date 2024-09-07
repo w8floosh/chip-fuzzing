@@ -2,6 +2,8 @@
 
 #include "DeviceStateManager.h"
 #include <any>
+#include <app/tests/suites/commands/interaction_model/InteractionModel.h>
+
 namespace chip {
 namespace fuzzing {
 
@@ -25,7 +27,8 @@ public:
     ~Oracle() {};
 
     // TODO: Edit signature to take AttributeDataIB/AttributeStatusIB as parameter too
-    OracleStatus & Consume(CHIP_ERROR actual, CHIP_ERROR expected);
+    OracleStatus & Consume(const CHIP_ERROR & actual, const CHIP_ERROR & expected);
+    OracleStatus & Consume(const chip::app::StatusIB & actual, chip::app::StatusIB & expected);
 
 private:
     OracleStatus mCurrentStatus;
