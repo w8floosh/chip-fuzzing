@@ -1,19 +1,19 @@
-#include "Fuzzers.h"
+#include "../Fuzzing.h"
 #include <fstream>
 #include <random>
-namespace fuzzers = chip::fuzzing::wrappers;
 
-const char * fuzzers::AFLPlusPlus::GenerateCommand()
-{
-    return nullptr;
-}
-const char * fuzzers::SeedOnly::GenerateCommand()
+namespace fs = std::filesystem;
+
+namespace chip {
+namespace fuzzing {
+namespace generation {
+const char * GenerateCommandSeedOnly(fs::path seedsDir)
 {
     std::vector<std::string> files;
 
-    VerifyOrDie(std::filesystem::exists(mSeedsDirectory));
+    VerifyOrDie(std::filesystem::exists(seedsDir));
     // Read all file names from the seed directory
-    for (const auto & entry : std::filesystem::directory_iterator(mSeedsDirectory))
+    for (const auto & entry : std::filesystem::directory_iterator(seedsDir))
     {
         if (entry.is_regular_file())
         {
@@ -36,4 +36,8 @@ const char * fuzzers::SeedOnly::GenerateCommand()
     }
     // Return nullptr if the file is empty or cannot be read
     return nullptr;
-}
+};
+
+} // namespace generation
+} // namespace fuzzing
+} // namespace chip

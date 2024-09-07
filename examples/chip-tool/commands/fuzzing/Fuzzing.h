@@ -6,53 +6,83 @@
 #include <filesystem>
 
 namespace fs = std::filesystem;
+
+class FuzzingStartCommand;
+class FuzzingCommand;
+
 namespace chip {
 namespace fuzzing {
-
-enum FuzzerType
-{
-    AFL_PLUSPLUS,
-    SEED_ONLY,
-    Z
-};
-enum FuzzingStrategy
-{
-    NONE,
-    B,
-    C
-};
 
 class Fuzzer
 {
 public:
-    Fuzzer(fs::path seedsDirectory, FuzzingStrategy strategy) : mSeedsDirectory(seedsDirectory), mStrategy(strategy) {};
-    Fuzzer(fs::path seedsDirectory, FuzzingStrategy strategy, fs::path outputDirectory) :
-        mSeedsDirectory(seedsDirectory), mStrategy(strategy)
+    const char * GenerateCommand() { return mGenerationFunc(mSeedsDirectory); }
+    static Fuzzer * GetInstance(std::function<Fuzzer()> * init = nullptr)
     {
-        mOutputDirectory.SetValue(outputDirectory);
-    };
-    virtual ~Fuzzer() = default;
+        static Fuzzer f{ (*init)() };
+        return &f;
+    }
 
-    virtual const char * GenerateCommand() = 0;
-    void ProcessCommandOutput(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path, CHIP_ERROR error,
-                              CHIP_ERROR expectedError, const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus);
-    void ProcessCommandOutput(CHIP_ERROR error, CHIP_ERROR expectedError);
+    // used in ClusterCommand::OnResponse callback
+    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
+                              const chip::app::ConcreteCommandPath & path, const chip::app::StatusIB & status,
+                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+
+    // used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
+    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
+                              const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status,
+                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+
+    // used in ReportCommand::OnEventData callback
+    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, const chip::app::EventHeader & eventHeader,
+                              chip::TLV::TLVReader * data, const chip::app::StatusIB * status,
+                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+
+    // used in OnError callbacks
+    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
+                              CHIP_ERROR expectedError = CHIP_NO_ERROR);
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
 
 protected:
+    friend class ::FuzzingStartCommand;
+
+    static void Initialize(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc)
+    {
+        std::function<Fuzzer()> init = [seedsDirectory, generationFunc]() { return Fuzzer(seedsDirectory, generationFunc); };
+        GetInstance(&init);
+    }
+    static void Initialize(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory)
+    {
+        std::function<Fuzzer()> init = [seedsDirectory, generationFunc, outputDirectory]() {
+            return Fuzzer(seedsDirectory, generationFunc, outputDirectory);
+        };
+        GetInstance(&init);
+    }
+
     fs::path mSeedsDirectory;
     Optional<fs::path> mOutputDirectory = NullOptional;
     DeviceStateManager mDeviceStateManager;
-    Oracle mOracle;
+    std::shared_ptr<Oracle> mOracle;
 
     // TODO: Should the fuzzer log oracle outputs too?
-    CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteCommandPath & dataModelPath);
+    CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
 
 private:
-    FuzzingStrategy mStrategy;
+    Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc) {};
+    Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory) :
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc)
+    {
+        mOutputDirectory.SetValue(outputDirectory);
+    };
+    Fuzzer(const Fuzzer &)                 = delete;
+    Fuzzer(Fuzzer &&) noexcept             = delete;
+    Fuzzer & operator=(const Fuzzer &)     = delete;
+    Fuzzer & operator=(Fuzzer &&) noexcept = delete;
+
+    std::function<const char *(fs::path)> mGenerationFunc;
 };
 
-const FuzzerType * ConvertStringToFuzzerType(const char * key);
-const FuzzingStrategy * ConvertStringToFuzzingStrategy(const char * key);
+std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
 } // namespace fuzzing
 } // namespace chip
