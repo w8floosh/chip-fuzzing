@@ -1,53 +1,97 @@
 #include "Fuzzing.h"
-#include "Fuzzers.h"
+#include "generation/Wrappers.cpp"
 #include <lib/support/jsontlv/TlvJson.h>
 
 namespace fuzz = chip::fuzzing;
-
-namespace {
-
-std::unordered_map<std::string, fuzz::FuzzerType> fuzzerTypeMap({ { "afl++", fuzz::FuzzerType::AFL_PLUSPLUS },
-                                                                  { "seed-only", fuzz::FuzzerType::SEED_ONLY } });
-std::unordered_map<std::string, fuzz::FuzzingStrategy> fuzzingStrategyMap({ { "none", fuzz::FuzzingStrategy::NONE } });
-
-template <typename T>
-const T * GetMapElementFromKeyEnum(const std::unordered_map<std::string, T> & map, const char * key)
+namespace chip {
+void TLVDataToString(chip::TLV::TLVReader *& data)
 {
-    VerifyOrReturnValue(std::is_enum<T>::value, nullptr);
-
-    auto found = map.find(std::string(key));
-    VerifyOrReturnValue(found != map.end(), nullptr);
-
-    return &(found->second);
+    chip::TLV::TLVReader outputReader;
+    Json::Value json;
+    outputReader.Init(*data);
+    TlvToJson(outputReader, json);
+    std::cout << JsonToString(json) << std::endl;
 }
-} // namespace
+} // namespace chip
 
-void fuzz::Fuzzer::ProcessCommandOutput(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path, CHIP_ERROR error,
-                                        CHIP_ERROR expectedError, const chip::app::StatusIB & status,
+void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
+                                        const chip::app::ConcreteCommandPath & path, const chip::app::StatusIB & status,
                                         chip::app::StatusIB expectedStatus)
 {
-    if (data == nullptr)
-        return;
+    switch (messageType)
     {
-        chip::TLV::TLVReader outputReader;
-        Json::Value json;
-        outputReader.Init(*data);
-        TlvToJson(outputReader, json);
-        std::cout << JsonToString(json) << std::endl;
-
-        // TODO: Manually parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+    case chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse: {
+        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
         // TODO: For each error, log a line showing command, error type and error description
+        if (data != nullptr)
+        {
+            TLVDataToString(data);
+        }
+        mOracle->Consume(status, expectedStatus);
+        break;
+    }
+    default:
+        break;
     }
 }
 
-void fuzz::Fuzzer::ProcessCommandOutput(CHIP_ERROR error, CHIP_ERROR expectedError) {}
+// used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
+void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
+                                        const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status,
+                                        chip::app::StatusIB expectedStatus)
+{
+    switch (messageType)
+    {
+    case chip::Protocols::InteractionModel::MsgType::ReportData: {
+        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+        // TODO: For each error, log a line showing command, error type and error description
+        if (data != nullptr)
+        {
+            TLVDataToString(data);
+        }
 
-CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app::ConcreteCommandPath & dataModelPath)
+        mOracle->Consume(status, expectedStatus);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+// used in ReportCommand::OnEventData callback
+void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType,
+                                        const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
+                                        const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus)
+{
+    switch (messageType)
+    {
+    case chip::Protocols::InteractionModel::MsgType::ReportData: {
+        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+        // TODO: For each error, log a line showing command, error type and error description
+        if (data != nullptr)
+        {
+            TLVDataToString(data);
+            if (status != nullptr)
+            {
+                mOracle->Consume(*status, expectedStatus);
+            }
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
+                                        CHIP_ERROR expectedError)
+{}
+
+CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath)
 {
     namespace fs = std::filesystem;
-
-    auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    auto now     = std::chrono::system_clock::now();
+    auto now_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
 
     // Create seed hash from current timestamp
     std::hash<std::string> hasher;
@@ -75,12 +119,14 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     return CHIP_NO_ERROR;
 }
 
-const fuzz::FuzzerType * fuzz::ConvertStringToFuzzerType(const char * key)
+std::function<const char *(fs::path)> fuzz::ConvertStringToGenerationFunction(const char * key)
 {
-    return GetMapElementFromKeyEnum<fuzz::FuzzerType>(fuzzerTypeMap, key);
-}
-
-const fuzz::FuzzingStrategy * fuzz::ConvertStringToFuzzingStrategy(const char * key)
-{
-    return GetMapElementFromKeyEnum<fuzz::FuzzingStrategy>(fuzzingStrategyMap, key);
+    if (std::string(key).compare("seed-only") == 0)
+    {
+        return fuzz::generation::GenerateCommandSeedOnly;
+    }
+    else
+    {
+        return nullptr;
+    }
 }

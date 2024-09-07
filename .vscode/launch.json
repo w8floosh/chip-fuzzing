@@ -419,8 +419,7 @@
             "args": [
                 "fuzzing",
                 "start",
-                "seed_only",
-                "none",
+                "seed-only",
                 "seeds",
                 "--iterations",
                 "2000"

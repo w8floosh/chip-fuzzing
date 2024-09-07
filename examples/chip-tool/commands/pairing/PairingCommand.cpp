@@ -249,7 +249,7 @@ CHIP_ERROR PairingCommand::Pair(NodeId remoteId, PeerAddress address)
 CHIP_ERROR PairingCommand::PairWithMdnsOrBleByIndex(NodeId remoteId, uint16_t index)
 {
 #if CHIP_DEVICE_LAYER_TARGET_DARWIN
-    VerifyOrReturnError(IsInteractive(), CHIP_ERROR_INCORRECT_STATE);
+    VerifyOrReturnError(IsInteractive() || IsFuzzing(), CHIP_ERROR_INCORRECT_STATE);
 
     VerifyOrDieWithMsg(mSetupPINCode.has_value(), chipTool, "Using mSetupPINCode in a mode when we have not gotten one");
 
@@ -280,7 +280,7 @@ CHIP_ERROR PairingCommand::PairWithMdnsOrBleByIndexWithCode(NodeId remoteId, uin
     mSetupPINCode.reset();
 
 #if CHIP_DEVICE_LAYER_TARGET_DARWIN
-    VerifyOrReturnError(IsInteractive(), CHIP_ERROR_INCORRECT_STATE);
+    VerifyOrReturnError(IsInteractive() || IsFuzzing(), CHIP_ERROR_INCORRECT_STATE);
 
     Dnssd::CommonResolutionData resolutionData;
     auto err = GetDeviceScanner().Get(index, resolutionData);

@@ -125,6 +125,15 @@ public:
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
             mError = error;
         }
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::WriteResponse, nullptr, path, status);
+            }
+        }
     }
 
     void OnError(const chip::app::WriteClient * client, CHIP_ERROR error) override
@@ -133,6 +142,15 @@ public:
 
         ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
         mError = error;
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::WriteResponse, error);
+            }
+        }
     }
 
     void OnDone(chip::app::WriteClient * client) override

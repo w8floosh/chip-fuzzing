@@ -108,7 +108,7 @@ void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, 
 {
     AttributeState * attributeState = GetAttributeState(node, endpoint, cluster, attribute);
     VerifyOrReturn(attributeState != nullptr,
-                   ChipLogError(chipFuzzer, "[DeviceStateManager] failed to write attribute state: %d", attribute));
+                   ChipLogError(chipFuzzer, "DeviceStateManager failed to write attribute state: %d", attribute));
     *attributeState = aValue;
 }
 

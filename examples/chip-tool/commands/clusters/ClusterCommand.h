@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include "../fuzzing/Fuzzing.h"
 #include "DataModelLogger.h"
 #include "ModelCommand.h"
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
@@ -108,11 +109,9 @@ public:
     virtual void OnResponse(chip::app::CommandSender * client, const chip::app::ConcreteCommandPath & path,
                             const chip::app::StatusIB & status, chip::TLV::TLVReader * data) override
     {
-        // TODO: Can we edit this to send the response to the fuzzer?
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
-            LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(path, status));
 
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
             mError = error;
@@ -128,6 +127,7 @@ public:
                 LogErrorOnFailure(RemoteDataModelLogger::LogCommandAsJSON(path, &logTlvReader));
                 error = DataModelLogger::LogCommand(path, &logTlvReader);
             }
+
             if (CHIP_NO_ERROR != error)
             {
                 ChipLogError(chipTool, "Response Failure: Can not decode Data");
@@ -162,6 +162,16 @@ public:
         {
             ClearICDEntry(mScopedNodeId);
         }
+
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, data, path, status);
+            }
+        }
     }
 
     virtual void OnError(const chip::app::CommandSender * client, CHIP_ERROR error) override
@@ -170,6 +180,16 @@ public:
 
         ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
         mError = error;
+
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, error);
+            }
+        }
     }
 
     virtual void OnDone(chip::app::CommandSender * client) override
