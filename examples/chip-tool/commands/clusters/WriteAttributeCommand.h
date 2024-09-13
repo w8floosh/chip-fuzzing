@@ -117,6 +117,15 @@ public:
     void OnResponse(const chip::app::WriteClient * client, const chip::app::ConcreteDataAttributePath & path,
                     chip::app::StatusIB status) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->AnalyzeReportData(nullptr, path, status);
+            }
+        }
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
@@ -125,32 +134,23 @@ public:
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
             mError = error;
         }
-        if (IsFuzzing())
-        {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::WriteResponse, nullptr, path, status);
-            }
-        }
     }
 
     void OnError(const chip::app::WriteClient * client, CHIP_ERROR error) override
     {
-        LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
-
-        ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
-        mError = error;
         if (IsFuzzing())
         {
             using Fuzzer    = chip::fuzzing::Fuzzer;
             Fuzzer * fuzzer = Fuzzer::GetInstance();
             if (fuzzer != nullptr)
             {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::WriteResponse, error);
+                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::WriteResponse, error);
             }
         }
+        LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
+
+        ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
+        mError = error;
     }
 
     void OnDone(chip::app::WriteClient * client) override

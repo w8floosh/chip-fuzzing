@@ -24,23 +24,21 @@ public:
     }
 
     // used in ClusterCommand::OnResponse callback
-    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
-                              const chip::app::ConcreteCommandPath & path, const chip::app::StatusIB & status,
-                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+    void AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
+                                const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
     // used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
-    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
-                              const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status,
-                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+    void AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
+                           const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
     // used in ReportCommand::OnEventData callback
-    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, const chip::app::EventHeader & eventHeader,
-                              chip::TLV::TLVReader * data, const chip::app::StatusIB * status,
-                              chip::app::StatusIB expectedStatus = chip::app::StatusIB());
+    void AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
+                           const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
     // used in OnError callbacks
-    void ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
-                              CHIP_ERROR expectedError = CHIP_NO_ERROR);
+    void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
+                             CHIP_ERROR expectedError = CHIP_NO_ERROR);
+
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
 
 protected:
@@ -69,9 +67,9 @@ protected:
 
 private:
     Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc) {};
+        mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc) {};
     Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory) :
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc)
+        mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc)
     {
         mOutputDirectory.SetValue(outputDirectory);
     };

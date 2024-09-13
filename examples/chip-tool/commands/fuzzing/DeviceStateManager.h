@@ -1,5 +1,6 @@
 #pragma once
 
+#include "tlv/TypeMapping.h"
 #include <any>
 #include <app-common/zap-generated/cluster-objects.h>
 #include <lib/core/CHIPCore.h>
@@ -10,35 +11,73 @@
 #include <unordered_set>
 #include <vector>
 
+enum AttributeQualityEnum
+{
+    kMandatory = 0,
+    kNullable  = 1,
+    kOptional  = 2,
+};
+
+namespace DM = chip::app::DataModel;
 namespace {
 
-/**
- * Namespace containing some useful traits for working with multilevel unordered maps.
- * This is used to build a multilevel unordered map with a variadic number of key types.
- * The multilevel_unordered_map_t alias template is provided for convenience.
- */
-
-template <typename... Types>
-struct multilevel_unordered_map;
-
-// Recursive case: Builds an unordered_map with the first key type and recurses with the rest.
-template <typename KeyType, typename... Rest>
-struct multilevel_unordered_map<KeyType, Rest...>
+template <typename Derived, chip::TLV::TLVType T, uint8_t bytes>
+struct ClusterAttributeBase
 {
-    using type = std::unordered_map<KeyType, typename multilevel_unordered_map<Rest...>::type>;
+    using underlying_t       = typename chip::fuzzing::TLV::DecodedTLVElement<T, bytes>::type;
+    chip::TLV::TLVType tlv_t = T;
 };
 
-// Specialization for the case when there are only two types left: a single KeyType and the ValueType.
-template <typename KeyType, typename ValueType>
-struct multilevel_unordered_map<KeyType, ValueType>
+template <chip::TLV::TLVType T, uint8_t bytes = 0, AttributeQualityEnum Q = AttributeQualityEnum::kMandatory>
+struct ClusterAttribute;
+
+template <chip::TLV::TLVType T, uint8_t bytes>
+struct ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>
+    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>, T, bytes>
 {
-    using type = std::unordered_map<KeyType, ValueType>;
+    using underlying_t =
+        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>, T, bytes>::underlying_t;
+    AttributeQualityEnum quality = AttributeQualityEnum::kMandatory;
+    underlying_t & operator=(const underlying_t & aValue)
+    {
+        this->value = aValue;
+        return this->value;
+    };
+    underlying_t & operator()() { return this->value; };
+    underlying_t value;
 };
 
-// Convenience alias template
-template <typename... Types>
-using multilevel_unordered_map_t = typename multilevel_unordered_map<Types...>::type;
+template <chip::TLV::TLVType T, uint8_t bytes>
+struct ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>
+    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>, T, bytes>
+{
+    using underlying_t =
+        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>, T, bytes>::underlying_t;
+    AttributeQualityEnum quality = AttributeQualityEnum::kOptional;
+    underlying_t & operator=(const underlying_t & aValue)
+    {
+        this->value.SetValue(aValue);
+        return this->value.Value();
+    };
+    underlying_t & operator()() { return this->value.Value(); };
+    chip::Optional<underlying_t> value = chip::NullOptional;
+};
 
+template <chip::TLV::TLVType T, uint8_t bytes>
+struct ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>
+    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>, T, bytes>
+{
+    using underlying_t =
+        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>, T, bytes>::underlying_t;
+    AttributeQualityEnum quality = AttributeQualityEnum::kNullable;
+    underlying_t & operator=(const underlying_t & aValue)
+    {
+        this->value.SetValue(aValue);
+        return this->value.Value();
+    };
+    underlying_t & operator()() { return this->value.Value(); };
+    DM::Nullable<underlying_t> value = DM::NullNullable;
+};
 } // namespace
 
 namespace chip {
@@ -47,29 +86,36 @@ namespace fuzzing {
 class AttributeState
 {
 public:
-    AttributeId id;
-    std::string name;
+    virtual ~AttributeState()                                                          = 0;
+    virtual const ClusterAttribute<chip::TLV::TLVType::kTLVType_NotSpecified> * Read() = 0;
+};
 
-    AttributeState(AttributeId aId) : id(aId), name(""), mValue(Optional<std::any>::Missing()) {};
-    AttributeState(AttributeId aId, std::string aName) : id(aId), name(aName), mValue(Optional<std::any>::Missing()) {};
-    template <class T>
-    AttributeState(AttributeId aId, std::string aName, T aValue) :
-        id(aId), name(aName), mValue(Optional<std::any>::Value(std::make_any<T>(aValue))){};
+template <chip::TLV::TLVType T, uint8_t B = 0, AttributeQualityEnum Q = AttributeQualityEnum::kMandatory>
+/**/
+class ConcreteAttributeState : public AttributeState
+{
+    using underlying_t = typename ClusterAttribute<T, B, Q>::underlying_t;
 
-    template <class T>
-    const T * Read();
-
-    template <class T>
-    AttributeState & operator=(const T & aValue);
+public:
+    ConcreteAttributeState() : mValue(ClusterAttribute<T, B, Q>{}) {}
+    ConcreteAttributeState(const underlying_t & value) : mValue(ClusterAttribute<T, B, Q>{ value }) {}
+    const underlying_t * Read() override { return mValue(); }
+    const underlying_t & Write(const underlying_t & value)
+    {
+        underlying_t oldValue = mValue();
+        mValue                = value;
+        return oldValue;
+    }
 
 private:
-    // TODO: Attribute types are not known at compile time, so std::any is used. Other ideas?
-    Optional<std::any> mValue;
+    ClusterAttribute<T, B, Q> mValue;
 };
+
 struct ClusterState
 {
     ClusterId clusterId;
-    std::unordered_map<AttributeId, AttributeState> attributes;
+    int clusterRevision;
+    std::unordered_map<AttributeId, AttributeState *> attributes;
 };
 struct EndpointState
 {
@@ -83,7 +129,7 @@ struct NodeState
     std::unordered_map<EndpointId, EndpointState> endpoints;
 };
 
-class DeviceState
+struct DeviceState
 {
 public:
     FabricId fabric;
@@ -93,38 +139,6 @@ public:
     NodeState * operator()(NodeId id);
     EndpointState * operator()(NodeId node, EndpointId endpoint);
     ClusterState * operator()(NodeId node, EndpointId endpoint, ClusterId cluster);
-};
-
-/**
- * @class DeviceConfiguration
- * @brief Keeps a trace of the device configuration tree using resource IDs only.
- *
- * The DeviceStateManager class is responsible for managing the state of devices. It provides methods for
- * retrieving and setting attributes of a device, as well as accessing the clusters associated with a device's
- * endpoint. The class also contains a DeviceState object that represents the current state of the device.
- */
-class DeviceConfiguration
-{
-public:
-    DeviceConfiguration() {};
-    ~DeviceConfiguration() {};
-
-    /**
-     * @fn operator()
-     * @brief Retrieves the configuration of a device, endpoint, or cluster by recursively scanning the configuration.
-     * Returns nullptr if the requested resource is not yet configured.
-     */
-    template <typename... Ks>
-    auto * Read(const Ks... ids);
-    template <typename... Ks>
-    const auto * Read(const Ks... ids) const;
-    template <typename... Ks>
-    auto & Reset(const Ks... ids);
-    template <typename V, typename... Ks>
-    bool Write(const Ks... ids, const V & aValue);
-
-private:
-    multilevel_unordered_map_t<NodeId, EndpointId, ClusterId, std::unordered_set<AttributeId>> mConfiguration;
 };
 
 /**
@@ -139,25 +153,46 @@ private:
  */
 class DeviceStateManager
 {
+    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+    using underlying_t = typename ClusterAttribute<T, Q>::underlying_t;
+
 public:
     DeviceStateManager() {};
     ~DeviceStateManager() {};
 
-    DeviceConfiguration deviceConfig;
+    const auto ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
+    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+                        const typename ClusterAttribute<T, Q>::underlying_t & aValue);
 
-    template <class T>
-    const T * ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
-    template <class T>
-    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, T value);
-    std::unordered_map<ClusterId, ClusterState> * GetClustersOnEndpoint(NodeId node, EndpointId endpoint);
+    auto List() { return mDeviceState.nodes; }
+    auto List(NodeId node)
+    {
+        VerifyOrDie(mDeviceState(node) != nullptr);
+        return mDeviceState(node)->endpoints;
+    }
+    auto List(NodeId node, EndpointId endpoint)
+    {
+        VerifyOrDie(mDeviceState(node, endpoint) != nullptr);
+        return mDeviceState(node, endpoint)->clusters;
+    }
+    auto List(NodeId node, EndpointId endpoint, ClusterId cluster)
+    {
+        VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
+        return mDeviceState(node, endpoint, cluster)->attributes;
+    }
 
-    auto & ResetState(NodeId node, DeviceTypeId deviceType);
-    auto & ResetState(NodeId node, EndpointId endpoint);
-    auto & ResetState(NodeId node, EndpointId endpoint, ClusterId cluster);
+    void Add(NodeId node, DeviceTypeId deviceType);
+    void Add(NodeId node, EndpointId endpoint);
+    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision);
+    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
+    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, const underlying_t<T, Q> & value);
+    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, CommandId command);
 
 private:
     DeviceState mDeviceState;
-    AttributeState * GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
 };
 
 } // namespace fuzzing
