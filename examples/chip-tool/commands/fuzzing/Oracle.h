@@ -18,12 +18,13 @@ enum OracleStatus
     // UNRECOGNIZED_PATH,     // Received data which isn't on a standard path
     OUT_OF_MEMORY, // The device is out of memory
     BUSY,          // The device is unresponsive or busy
-    INITIALIZED,   // Starting state: the oracle hasn't received any data yet
+    INITIALIZED,   // Initial current status: the oracle hasn't received any data yet
+    UNINITIALIZED, // INitial last status: the oracle hasn't received any data yet
 };
 class Oracle
 {
 public:
-    Oracle() : mCurrentStatus(OracleStatus::OK), mLastStatus(OracleStatus::INITIALIZED) {};
+    Oracle() : mCurrentStatus(OracleStatus::INITIALIZED), mLastStatus(OracleStatus::UNINITIALIZED) {};
     ~Oracle() {};
 
     // TODO: Edit signature to take AttributeDataIB/AttributeStatusIB as parameter too

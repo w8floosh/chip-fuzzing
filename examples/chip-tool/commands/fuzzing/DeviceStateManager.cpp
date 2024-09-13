@@ -29,7 +29,6 @@ auto * ReadValueOrNull(Map & map, const K & id, const Path &... ids)
     VerifyOrReturnValue(found != map.end(), static_cast<ValueType *>(nullptr));
     return ReadValueOrNull(found->second, ids...);
 }
-
 // This sets a default value to a key in a map if it doesn't already exist, then returns it
 template <typename Map, typename K>
 auto & ReadValueOrDefault(Map & map, const K & id)
@@ -56,20 +55,6 @@ bool WriteValue(Map & map, const K & id, const Path &... ids, const V & aValue)
 
 } // namespace
 
-template <class T>
-const T * fuzz::AttributeState::Read()
-{
-    VerifyOrReturnValue(mValue.HasValue(), nullptr);
-    return &(std::any_cast<T>(mValue.Value()));
-}
-
-template <class T>
-fuzz::AttributeState & fuzz::AttributeState::operator=(const T & aValue)
-{
-    mValue.SetValue(std::make_any<T>(aValue));
-    return *this;
-}
-
 fuzz::NodeState * fuzz::DeviceState::operator()(NodeId id)
 {
     return ReadValueOrNull(nodes, id);
@@ -87,81 +72,56 @@ fuzz::ClusterState * fuzz::DeviceState::operator()(NodeId node, EndpointId endpo
     return ReadValueOrNull((*this)(node, endpoint)->clusters, cluster);
 }
 
-fuzz::AttributeState * fuzz::DeviceStateManager::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
-                                                                   AttributeId attribute)
+const auto fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
-    ClusterState * clusterState = mDeviceState(node, endpoint, cluster);
-    VerifyOrReturnValue(clusterState != nullptr, nullptr);
-    return ReadValueOrNull(clusterState->attributes, attribute);
+    VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
+    fuzz::AttributeState ** attributeState = ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    VerifyOrDie(attributeState != nullptr);
+    return (*attributeState)->Read();
 }
 
-template <class T>
-const T * fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
+template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+                                              const typename ClusterAttribute<T, Q>::underlying_t & aValue)
 {
-    AttributeState * attributeState = GetAttributeState(node, endpoint, cluster, attribute);
-    VerifyOrReturnValue(attributeState != nullptr, nullptr);
-    return attributeState->Read<T>();
-}
-
-template <class T>
-void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, T aValue)
-{
-    AttributeState * attributeState = GetAttributeState(node, endpoint, cluster, attribute);
-    VerifyOrReturn(attributeState != nullptr,
-                   ChipLogError(chipFuzzer, "DeviceStateManager failed to write attribute state: %d", attribute));
-    *attributeState = aValue;
-}
-
-std::unordered_map<chip::ClusterId, fuzz::ClusterState> * fuzz::DeviceStateManager::GetClustersOnEndpoint(NodeId node,
-                                                                                                          EndpointId endpoint)
-{
-    VerifyOrReturnValue(mDeviceState(node, endpoint) != nullptr, nullptr);
-    return &mDeviceState(node, endpoint)->clusters;
-}
-
-template <typename... Path>
-auto * fuzz::DeviceConfiguration::Read(const Path... ids)
-{
-    return ReadValueOrNull(mConfiguration, ids...);
-}
-
-template <typename... Path>
-const auto * fuzz::DeviceConfiguration::Read(const Path... ids) const
-{
-    return ReadValueOrNull(mConfiguration, ids...);
-}
-
-template <typename... Path>
-auto & fuzz::DeviceConfiguration::Reset(const Path... ids)
-{
-    return ReadValueOrDefault(mConfiguration, ids...);
-}
-
-template <typename V, typename... Path>
-bool fuzz::DeviceConfiguration::Write(const Path... ids, const V & aValue)
-{
-    return WriteValue(mConfiguration, ids..., aValue);
+    VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
+    auto *& attributeState = ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    dynamic_cast<ConcreteAttributeState<T, Q> *>(attributeState)->Write(aValue);
 }
 
 // TODO: Consider variadic refactoring
-auto & fuzz::DeviceStateManager::ResetState(NodeId node, DeviceTypeId deviceType)
+void fuzz::DeviceStateManager::Add(NodeId node, DeviceTypeId deviceType)
 {
     NodeState state{};
     state.deviceTypeId = deviceType;
     mDeviceState.nodes.emplace(node, state);
-    return deviceConfig.Reset(node);
 }
-auto & fuzz::DeviceStateManager::ResetState(NodeId node, EndpointId endpoint)
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
 {
     EndpointState state{};
     state.endpointId = endpoint;
     mDeviceState(node)->endpoints.emplace(endpoint, state);
-    return deviceConfig.Reset(node, endpoint);
 }
-auto & fuzz::DeviceStateManager::ResetState(NodeId node, EndpointId endpoint, ClusterId cluster)
+
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision = 5)
 {
     ClusterState state{};
-    state.clusterId = cluster;
+    state.clusterId       = cluster;
+    state.clusterRevision = revision;
     mDeviceState(node, endpoint)->clusters.emplace(cluster, state);
-    return deviceConfig.Reset(node, endpoint, cluster);
+}
+
+template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
+{
+    ConcreteAttributeState<T, Q> state{};
+    mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
+}
+
+template <chip::TLV::TLVType T, AttributeQualityEnum Q>
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+                                   const typename ClusterAttribute<T, Q>::underlying_t & value)
+{
+    ConcreteAttributeState<T, Q> state{ value };
+    mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
 }

@@ -35,6 +35,17 @@ public:
     void OnAttributeData(const chip::app::ConcreteDataAttributePath & path, chip::TLV::TLVReader * data,
                          const chip::app::StatusIB & status) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
+                fuzzer->AnalyzeReportData(data, path, status);
+            }
+        }
+
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
@@ -61,21 +72,22 @@ public:
             mError = error;
             return;
         }
+    }
 
+    void OnEventData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
+                     const chip::app::StatusIB * status) override
+    {
         if (IsFuzzing())
         {
             using Fuzzer    = chip::fuzzing::Fuzzer;
             Fuzzer * fuzzer = Fuzzer::GetInstance();
             if (fuzzer != nullptr)
             {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::ReportData, data, path, status);
+                // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
+                fuzzer->AnalyzeReportData(eventHeader, data, status);
             }
         }
-    }
 
-    void OnEventData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
-                     const chip::app::StatusIB * status) override
-    {
         if (status != nullptr)
         {
             CHIP_ERROR error = status->ToChipError();
@@ -105,32 +117,23 @@ public:
             mError = error;
             return;
         }
-        if (IsFuzzing())
-        {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::ReportData, eventHeader, data, status);
-            }
-        }
     }
 
     void OnError(CHIP_ERROR error) override
     {
-        LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
-
-        ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
-        mError = error;
         if (IsFuzzing())
         {
             using Fuzzer    = chip::fuzzing::Fuzzer;
             Fuzzer * fuzzer = Fuzzer::GetInstance();
             if (fuzzer != nullptr)
             {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::ReportData, error);
+                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::ReportData, error);
             }
         }
+        LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
+
+        ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
+        mError = error;
     }
 
     void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override

@@ -1,90 +1,66 @@
 #include "Fuzzing.h"
 #include "generation/Wrappers.cpp"
-#include <lib/support/jsontlv/TlvJson.h>
+#include "tlv/TLVDataPayloadHelper.h"
+#include "tlv/TypeMapping.h"
+#include <iostream>
+#include <json/json.h>
+#include <lib/support/jsontlv/TlvToJson.h>
 
 namespace fuzz = chip::fuzzing;
-namespace chip {
-void TLVDataToString(chip::TLV::TLVReader *& data)
+void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
+                                          const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus)
 {
-    chip::TLV::TLVReader outputReader;
-    Json::Value json;
-    outputReader.Init(*data);
-    TlvToJson(outputReader, json);
-    std::cout << JsonToString(json) << std::endl;
-}
-} // namespace chip
-
-void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
-                                        const chip::app::ConcreteCommandPath & path, const chip::app::StatusIB & status,
-                                        chip::app::StatusIB expectedStatus)
-{
-    switch (messageType)
+    if (data != nullptr)
     {
-    case chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse: {
-        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
-        // TODO: For each error, log a line showing command, error type and error description
-        if (data != nullptr)
-        {
-            TLVDataToString(data);
-        }
-        mOracle->Consume(status, expectedStatus);
-        break;
+        TLV::TLVDataPayloadHelper helper(data);
+        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
+        // helper.Decode(output);
+        helper.Print(path.mEndpointId, path.mClusterId, path.mCommandId);
     }
-    default:
-        break;
-    }
+
+    // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+    // TODO: For each error, log a line showing command, error type and error description
+    mOracle->Consume(status, expectedStatus);
 }
 
 // used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
-void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, chip::TLV::TLVReader * data,
-                                        const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status,
-                                        chip::app::StatusIB expectedStatus)
+void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
+                                     const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus)
 {
-    switch (messageType)
+    if (data != nullptr)
     {
-    case chip::Protocols::InteractionModel::MsgType::ReportData: {
-        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
-        // TODO: For each error, log a line showing command, error type and error description
-        if (data != nullptr)
-        {
-            TLVDataToString(data);
-        }
+        TLV::TLVDataPayloadHelper helper(data);
+        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
+        // helper.Decode(output);
+        helper.Print(path);
+    }
 
-        mOracle->Consume(status, expectedStatus);
-        break;
-    }
-    default:
-        break;
-    }
+    // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+    // TODO: For each error, log a line showing command, error type and error description
+    mOracle->Consume(status, expectedStatus);
 }
 
 // used in ReportCommand::OnEventData callback
-void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType,
-                                        const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
-                                        const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus)
+void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
+                                     const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus)
 {
-    switch (messageType)
+    if (data != nullptr)
     {
-    case chip::Protocols::InteractionModel::MsgType::ReportData: {
-        // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
-        // TODO: For each error, log a line showing command, error type and error description
-        if (data != nullptr)
-        {
-            TLVDataToString(data);
-            if (status != nullptr)
-            {
-                mOracle->Consume(*status, expectedStatus);
-            }
-        }
-        break;
+        TLV::TLVDataPayloadHelper helper(data);
+        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
+        // helper.Decode(output);
+        helper.Print(eventHeader);
+
+        // TODO: Add saving cluster snapshot to file on a certain condition
     }
-    default:
-        break;
-    }
+
+    // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
+    // TODO: For each error, log a line showing command, error type and error description
+    mOracle->Consume(*status, expectedStatus);
 }
 
-void fuzz::Fuzzer::ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
-                                        CHIP_ERROR expectedError)
+void fuzz::Fuzzer::AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
+                                       CHIP_ERROR expectedError)
 {}
 
 CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath)

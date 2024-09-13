@@ -419,12 +419,14 @@
             "args": [
                 "fuzzing",
                 "start",
+                "0xb",
                 "seed-only",
                 "seeds",
                 "--iterations",
                 "2000"
             ],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "breakpointMode": "path"
         },
 
         {

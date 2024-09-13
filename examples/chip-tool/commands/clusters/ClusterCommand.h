@@ -169,7 +169,7 @@ public:
             Fuzzer * fuzzer = Fuzzer::GetInstance();
             if (fuzzer != nullptr)
             {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, data, path, status);
+                fuzzer->AnalyzeCommandResponse(data, path, status);
             }
         }
     }
@@ -187,7 +187,7 @@ public:
             Fuzzer * fuzzer = Fuzzer::GetInstance();
             if (fuzzer != nullptr)
             {
-                fuzzer->ProcessCommandOutput(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, error);
+                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, error);
             }
         }
     }

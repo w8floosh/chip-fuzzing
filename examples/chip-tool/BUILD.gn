@@ -99,6 +99,8 @@ static_library("chip-tool-utils") {
 
   if (config_use_fuzzing) {
     sources += [
+      "${chip_root}/src/app/tests/integration/common.cpp",
+      "${chip_root}/src/app/tests/integration/common.h",
       "commands/fuzzing/Commands.h",
       "commands/fuzzing/DeviceStateManager.cpp",
       "commands/fuzzing/DeviceStateManager.h",
@@ -110,6 +112,9 @@ static_library("chip-tool-utils") {
       "commands/fuzzing/Oracle.cpp",
       "commands/fuzzing/Oracle.h",
       "commands/fuzzing/generation/Wrappers.cpp",
+      "commands/fuzzing/tlv/TLVDataPayloadHelper.cpp",
+      "commands/fuzzing/tlv/TLVDataPayloadHelper.h",
+      "commands/fuzzing/tlv/TypeMapping.h",
     ]
     deps += [
       "${chip_root}/examples/common/websocket-server",
