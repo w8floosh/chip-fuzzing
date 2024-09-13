@@ -9,22 +9,21 @@ fuzz::OracleStatus & fuzz::Oracle::Consume(const chip::app::StatusIB & actual, c
 fuzz::OracleStatus & fuzz::Oracle::Consume(const CHIP_ERROR & actual, const CHIP_ERROR & expected)
 {
     // TODO
-    using State = OracleStatus;
     mLastStatus = mCurrentStatus;
 
     if (actual == expected)
     {
-        mCurrentStatus = State::OK;
+        mCurrentStatus = OracleStatus::OK;
     }
     else
     {
-        if (mLastStatus == State::OK)
+        if (mLastStatus == OracleStatus::OK)
         {
-            mCurrentStatus = State::UNEXPECTED_RESPONSE;
+            mCurrentStatus = OracleStatus::UNEXPECTED_RESPONSE;
         }
         else
         {
-            mCurrentStatus = State::UNEXPECTED_BEHAVIOR;
+            mCurrentStatus = OracleStatus::UNEXPECTED_BEHAVIOR;
         }
     }
     return mCurrentStatus;

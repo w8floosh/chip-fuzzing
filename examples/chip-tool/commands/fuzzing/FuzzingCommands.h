@@ -59,7 +59,6 @@ private:
 
     CHIP_ERROR InitializeFuzzer();
 
-    CHIP_ERROR RetrieveNodeDescription(chip::NodeId node);
-    CHIP_ERROR SubscribeAll(chip::NodeId node);
+    CHIP_ERROR AcquireRemoteDataModel(chip::NodeId node);
     const char * GenerateCommand(chip::ClusterId cluster);
 };
