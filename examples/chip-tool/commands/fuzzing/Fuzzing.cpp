@@ -1,10 +1,5 @@
 #include "Fuzzing.h"
 #include "generation/Wrappers.cpp"
-#include "tlv/TLVDataPayloadHelper.h"
-#include "tlv/TypeMapping.h"
-#include <iostream>
-#include <json/json.h>
-#include <lib/support/jsontlv/TlvToJson.h>
 
 namespace fuzz = chip::fuzzing;
 void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
@@ -13,9 +8,11 @@ void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chi
     if (data != nullptr)
     {
         TLV::TLVDataPayloadHelper helper(data);
-        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
-        // helper.Decode(output);
         helper.Print(path.mEndpointId, path.mClusterId, path.mCommandId);
+        std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
+        VerifyOrDie(output != nullptr);
+        helper.Decode(output);
+        output->Print();
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -23,16 +20,17 @@ void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chi
     mOracle->Consume(status, expectedStatus);
 }
 
-// used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
 void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
                                      const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus)
 {
     if (data != nullptr)
     {
         TLV::TLVDataPayloadHelper helper(data);
-        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
-        // helper.Decode(output);
         helper.Print(path);
+        std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
+        VerifyOrDie(output != nullptr);
+        helper.Decode(output);
+        output->Print();
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -40,16 +38,17 @@ void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::ap
     mOracle->Consume(status, expectedStatus);
 }
 
-// used in ReportCommand::OnEventData callback
 void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
                                      const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus)
 {
     if (data != nullptr)
     {
         TLV::TLVDataPayloadHelper helper(data);
-        TLV::DecodedTLVElement<TLV::TLVType::kTLVType_Structure> output;
-        // helper.Decode(output);
         helper.Print(eventHeader);
+        std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
+        VerifyOrDie(output != nullptr);
+        helper.Decode(output);
+        output->Print();
 
         // TODO: Add saving cluster snapshot to file on a certain condition
     }
@@ -76,7 +75,7 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     std::string fileName(std::to_string(hashedValue)); // Convert hash to hex string
 
     fs::path seedExportDirectory = mSeedsDirectory / std::to_string(dataModelPath.mClusterId);
-    // Insert the command in the file at path "seeds/<clusterId>/<hashedValue>"
+    // Insert the command in the file at path "<seedsDirectory>/<clusterId>/<hashedValue>"
     if (!fs::exists(seedExportDirectory))
     {
         VerifyOrReturnError(!fs::create_directories(seedExportDirectory), CHIP_FUZZER_FILESYSTEM_ERROR);

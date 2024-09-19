@@ -1,4 +1,4 @@
-#include "../Fuzzing.h"
+#include "../ForwardDeclarations.h"
 #include <fstream>
 #include <random>
 

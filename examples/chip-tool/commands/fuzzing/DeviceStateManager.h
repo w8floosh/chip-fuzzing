@@ -1,131 +1,111 @@
 #pragma once
-
-#include "tlv/TypeMapping.h"
-#include <any>
-#include <app-common/zap-generated/cluster-objects.h>
-#include <lib/core/CHIPCore.h>
-#include <lib/core/CHIPError.h>
-#include <lib/core/Optional.h>
-#include <string>
+#include "AttributeFactory.h"
+#include "ForwardDeclarations.h"
 #include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
-enum AttributeQualityEnum
-{
-    kMandatory = 0,
-    kNullable  = 1,
-    kOptional  = 2,
-};
 
 namespace DM = chip::app::DataModel;
-namespace {
-
-template <typename Derived, chip::TLV::TLVType T, uint8_t bytes>
-struct ClusterAttributeBase
-{
-    using underlying_t       = typename chip::fuzzing::TLV::DecodedTLVElement<T, bytes>::type;
-    chip::TLV::TLVType tlv_t = T;
-};
-
-template <chip::TLV::TLVType T, uint8_t bytes = 0, AttributeQualityEnum Q = AttributeQualityEnum::kMandatory>
-struct ClusterAttribute;
-
-template <chip::TLV::TLVType T, uint8_t bytes>
-struct ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>
-    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>, T, bytes>
-{
-    using underlying_t =
-        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kMandatory>, T, bytes>::underlying_t;
-    AttributeQualityEnum quality = AttributeQualityEnum::kMandatory;
-    underlying_t & operator=(const underlying_t & aValue)
-    {
-        this->value = aValue;
-        return this->value;
-    };
-    underlying_t & operator()() { return this->value; };
-    underlying_t value;
-};
-
-template <chip::TLV::TLVType T, uint8_t bytes>
-struct ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>
-    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>, T, bytes>
-{
-    using underlying_t =
-        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kOptional>, T, bytes>::underlying_t;
-    AttributeQualityEnum quality = AttributeQualityEnum::kOptional;
-    underlying_t & operator=(const underlying_t & aValue)
-    {
-        this->value.SetValue(aValue);
-        return this->value.Value();
-    };
-    underlying_t & operator()() { return this->value.Value(); };
-    chip::Optional<underlying_t> value = chip::NullOptional;
-};
-
-template <chip::TLV::TLVType T, uint8_t bytes>
-struct ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>
-    : public ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>, T, bytes>
-{
-    using underlying_t =
-        typename ClusterAttributeBase<ClusterAttribute<T, bytes, AttributeQualityEnum::kNullable>, T, bytes>::underlying_t;
-    AttributeQualityEnum quality = AttributeQualityEnum::kNullable;
-    underlying_t & operator=(const underlying_t & aValue)
-    {
-        this->value.SetValue(aValue);
-        return this->value.Value();
-    };
-    underlying_t & operator()() { return this->value.Value(); };
-    DM::Nullable<underlying_t> value = DM::NullNullable;
-};
-} // namespace
-
 namespace chip {
 namespace fuzzing {
-
 class AttributeState
 {
 public:
-    virtual ~AttributeState()                                                          = 0;
-    virtual const ClusterAttribute<chip::TLV::TLVType::kTLVType_NotSpecified> * Read() = 0;
-};
-
-template <chip::TLV::TLVType T, uint8_t B = 0, AttributeQualityEnum Q = AttributeQualityEnum::kMandatory>
-/**/
-class ConcreteAttributeState : public AttributeState
-{
-    using underlying_t = typename ClusterAttribute<T, B, Q>::underlying_t;
-
-public:
-    ConcreteAttributeState() : mValue(ClusterAttribute<T, B, Q>{}) {}
-    ConcreteAttributeState(const underlying_t & value) : mValue(ClusterAttribute<T, B, Q>{ value }) {}
-    const underlying_t * Read() override { return mValue(); }
-    const underlying_t & Write(const underlying_t & value)
+    AttributeState() {};
+    // Copy constructor
+    AttributeState(const AttributeState & other)
     {
-        underlying_t oldValue = mValue();
-        mValue                = value;
-        return oldValue;
+        if (other.mValue)
+        {
+            mValue = std::make_unique<AttributeWrapper>(*other.mValue);
+        }
+        if (other.mOldValue)
+        {
+            mOldValue = std::make_unique<AttributeWrapper>(*other.mOldValue);
+        }
+    }
+    // Move constructor
+    AttributeState(AttributeState && other) noexcept : mValue(std::move(other.mValue)), mOldValue(std::move(other.mOldValue)) {}
+    // Copy assignment operator
+    AttributeState & operator=(const AttributeState & other)
+    {
+        if (this != &other)
+        {
+            mValue.reset();
+            mOldValue.reset();
+            if (other.mValue)
+            {
+                mValue = std::make_unique<AttributeWrapper>(*other.mValue);
+            }
+            if (other.mOldValue)
+            {
+                mOldValue = std::make_unique<AttributeWrapper>(*other.mOldValue);
+            }
+        }
+        return *this;
+    }
+    // Move assignment operator
+    AttributeState & operator=(AttributeState && other) noexcept
+    {
+        if (this != &other)
+        {
+            mValue    = std::move(other.mValue);
+            mOldValue = std::move(other.mOldValue);
+        }
+        return *this;
+    }
+    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality)
+    {
+        mValue = AttributeFactory::Create(aType, bytes, aQuality);
+    }
+    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, const AnyType & value)
+    {
+        mValue = AttributeFactory::Create(aType, value, bytes, aQuality);
+    }
+    const AnyType * ReadCurrent()
+    {
+        VerifyOrReturnValue(mValue != nullptr, nullptr);
+        return mValue->Read();
+    }
+    const AnyType * ReadLast()
+    {
+        VerifyOrReturnValue(mOldValue != nullptr, nullptr);
+        return mOldValue->Read();
+    }
+    CHIP_ERROR Write(const AnyType & value)
+    {
+        VerifyOrReturnError(mValue != nullptr, CHIP_ERROR_INCORRECT_STATE);
+        mOldValue = std::move(mValue);
+        ReturnErrorOnFailure(mValue->Write(value));
+        return CHIP_NO_ERROR;
+    }
+
+    CHIP_ERROR LazyInitialize(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, const AnyType & value)
+    {
+        mValue = AttributeFactory::Create(aType, value, bytes, aQuality);
+        VerifyOrReturnError(mValue != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
+        return CHIP_NO_ERROR;
     }
 
 private:
-    ClusterAttribute<T, B, Q> mValue;
+    std::shared_ptr<AttributeWrapper> mValue    = nullptr;
+    std::shared_ptr<AttributeWrapper> mOldValue = nullptr;
 };
 
 struct ClusterState
 {
     ClusterId clusterId;
     int clusterRevision;
-    std::unordered_map<AttributeId, AttributeState *> attributes;
+    std::unordered_map<AttributeId, AttributeState> attributes;
 };
+
 struct EndpointState
 {
     EndpointId endpointId;
+    DeviceTypeId deviceTypeId;
     std::unordered_map<ClusterId, ClusterState> clusters;
 };
 
 struct NodeState
 {
-    DeviceTypeId deviceTypeId;
     std::unordered_map<EndpointId, EndpointState> endpoints;
 };
 
@@ -145,25 +125,22 @@ public:
  * @class DeviceStateManager
  * @brief Manages the state of devices and provides methods for accessing and modifying device attributes.
  *
- * The DeviceStateManager class is responsible for managing the state of devices. It provides methods for
+ * The DeviceStateManager class is responsible for tracking and managing the state of devices. It provides methods for
  * retrieving and setting attributes of a device, as well as accessing the clusters associated with a device's
- * endpoint. The class also contains a DeviceState object that represents the current state of the device.
+ * endpoint.
+ *
+ * NOTE: Changes to the device state through this class are not reflected in the actual remote device state.
  *
  * TODO: Extend this to manage state of groups of devices.
  */
 class DeviceStateManager
 {
-    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
-    using underlying_t = typename ClusterAttribute<T, Q>::underlying_t;
-
 public:
     DeviceStateManager() {};
     ~DeviceStateManager() {};
 
-    const auto ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
-    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
-    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                        const typename ClusterAttribute<T, Q>::underlying_t & aValue);
+    const auto ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, bool current = true);
+    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, const AnyType & aValue);
 
     auto List() { return mDeviceState.nodes; }
     auto List(NodeId node)
@@ -182,14 +159,11 @@ public:
         return mDeviceState(node, endpoint, cluster)->attributes;
     }
 
-    void Add(NodeId node, DeviceTypeId deviceType);
-    void Add(NodeId node, EndpointId endpoint);
+    // The Add methods are used to add new nodes, endpoints, clusters, and attributes to the device state.
+    void Add(NodeId node);
+    void Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision);
-    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
-    template <chip::TLV::TLVType T, AttributeQualityEnum Q>
-    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, const underlying_t<T, Q> & value);
-    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, CommandId command);
 
 private:
     DeviceState mDeviceState;

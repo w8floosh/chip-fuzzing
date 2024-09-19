@@ -1,18 +1,23 @@
 #pragma once
 #include "DeviceStateManager.h"
-#include "Error.h"
+#include "ForwardDeclarations.h"
 #include "Oracle.h"
-#include <app/tests/suites/commands/interaction_model/InteractionModel.h>
-#include <filesystem>
+#include "tlv/DecodedTLVElement.h"
+#include "tlv/TLVDataPayloadHelper.h"
 
-namespace fs = std::filesystem;
-
-class FuzzingStartCommand;
 class FuzzingCommand;
-
+class FuzzingStartCommand;
 namespace chip {
 namespace fuzzing {
-
+/**
+ * @brief Generates mutated commands to test the CHIP device's behavior, as well as
+ * saving the valid ones as future reference.
+ *
+ * This class is the starting point for response data analysis coming from the response
+ * callbacks.
+ *
+ * There can be only one instance of the Fuzzer class, which is created by the FuzzingStartCommand class.
+ */
 class Fuzzer
 {
 public:
@@ -23,25 +28,27 @@ public:
         return &f;
     }
 
-    // used in ClusterCommand::OnResponse callback
+    // Analyzes data coming from the ClusterCommand::OnResponse callback.
     void AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
                                 const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
-    // used in ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks
+    // Analyzes data coming from the ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks.
     void AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
                            const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
-    // used in ReportCommand::OnEventData callback
+    // Analyzes data coming from the ReportCommand::OnEventData callback.
     void AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
                            const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
-    // used in OnError callbacks
+    // Analyzes data coming from the OnError callbacks.
     void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
                              CHIP_ERROR expectedError = CHIP_NO_ERROR);
 
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
 
 protected:
+    // FuzzingStartCommand must be a friend class as it is the only allowed to instantiate the Fuzzer class.
+    friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
 
     static void Initialize(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc)
@@ -78,6 +85,7 @@ private:
     Fuzzer & operator=(const Fuzzer &)     = delete;
     Fuzzer & operator=(Fuzzer &&) noexcept = delete;
 
+    // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
     std::function<const char *(fs::path)> mGenerationFunc;
 };
 

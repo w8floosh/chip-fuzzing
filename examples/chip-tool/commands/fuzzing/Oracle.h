@@ -1,12 +1,14 @@
 #pragma once
-
-#include "DeviceStateManager.h"
+#include "ForwardDeclarations.h"
 #include <any>
-#include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 
 namespace chip {
 namespace fuzzing {
 
+/**
+ * @brief The OracleStatus enum represents the possible outcomes of the bug oracle's analysis.
+ * The oracle status gives an insight into what went wrong with the device's behavior.
+ */
 enum OracleStatus
 // TODO: Create error description logs depending on the status
 {
@@ -19,8 +21,15 @@ enum OracleStatus
     OUT_OF_MEMORY, // The device is out of memory
     BUSY,          // The device is unresponsive or busy
     INITIALIZED,   // Initial current status: the oracle hasn't received any data yet
-    UNINITIALIZED, // INitial last status: the oracle hasn't received any data yet
+    UNINITIALIZED, // Initial last status: the oracle hasn't received any data yet
 };
+
+/**
+ * @class Oracle
+ * @brief The bug oracle checks if the received response status/error was expected or not.
+ * If not, it dumps the device's current state and the received data to a file, also logging the error.
+ * In other words, it checks if the device is behaving as expected.
+ */
 class Oracle
 {
 public:
@@ -37,6 +46,10 @@ private:
 };
 
 // TODO: Find some standard way to represent specification rules (conformance?)
+/**
+ * @brief The OracleRule struct represents a rule that the device's behavior must follow.
+ * It should encode a representation of the conformance rules that the device must follow when in a certain state.
+ */
 template <class com_t, class attr_t>
 struct OracleRule
 {

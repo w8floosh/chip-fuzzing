@@ -109,6 +109,15 @@ public:
     virtual void OnResponse(chip::app::CommandSender * client, const chip::app::ConcreteCommandPath & path,
                             const chip::app::StatusIB & status, chip::TLV::TLVReader * data) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->AnalyzeCommandResponse(data, path, status);
+            }
+        }
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
@@ -161,16 +170,6 @@ public:
             (path.mCommandId == chip::app::Clusters::IcdManagement::Commands::UnregisterClient::Id))
         {
             ClearICDEntry(mScopedNodeId);
-        }
-
-        if (IsFuzzing())
-        {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeCommandResponse(data, path, status);
-            }
         }
     }
 
