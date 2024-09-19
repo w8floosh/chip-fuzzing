@@ -1,12 +1,13 @@
 #pragma once
-
 #include "../clusters/DataModelLogger.h"
 #include "../common/CHIPCommand.h"
 #include "../common/Commands.h"
+#include "DeviceStateManager.h"
+#include "ForwardDeclarations.h"
 #include "Fuzzing.h"
 
 namespace fuzz = chip::fuzzing;
-
+namespace fs   = std::filesystem;
 class FuzzingCommand : public CHIPCommand
 {
 public:
@@ -24,6 +25,9 @@ private:
     Commands * mHandler = nullptr;
 };
 
+/**
+ * @brief Starts the fuzzing process that can then run other commands.
+ */
 class FuzzingStartCommand : public FuzzingCommand
 {
 public:
