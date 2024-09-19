@@ -72,34 +72,34 @@ fuzz::ClusterState * fuzz::DeviceState::operator()(NodeId node, EndpointId endpo
     return ReadValueOrNull((*this)(node, endpoint)->clusters, cluster);
 }
 
-const auto fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
+const auto fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+                                                   bool current)
 {
     VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
-    fuzz::AttributeState ** attributeState = ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    AttributeState * attributeState = ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute);
     VerifyOrDie(attributeState != nullptr);
-    return (*attributeState)->Read();
+    return current ? attributeState->ReadCurrent() : attributeState->ReadLast();
 }
 
-template <chip::TLV::TLVType T, AttributeQualityEnum Q>
 void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                                              const typename ClusterAttribute<T, Q>::underlying_t & aValue)
+                                              const AnyType & aValue)
 {
     VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
-    auto *& attributeState = ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
-    dynamic_cast<ConcreteAttributeState<T, Q> *>(attributeState)->Write(aValue);
+    AttributeState & attributeState = ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    attributeState.Write(aValue);
 }
 
 // TODO: Consider variadic refactoring
-void fuzz::DeviceStateManager::Add(NodeId node, DeviceTypeId deviceType)
+void fuzz::DeviceStateManager::Add(NodeId node)
 {
     NodeState state{};
-    state.deviceTypeId = deviceType;
     mDeviceState.nodes.emplace(node, state);
 }
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType)
 {
     EndpointState state{};
-    state.endpointId = endpoint;
+    state.endpointId   = endpoint;
+    state.deviceTypeId = deviceType;
     mDeviceState(node)->endpoints.emplace(endpoint, state);
 }
 
@@ -111,17 +111,8 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
     mDeviceState(node, endpoint)->clusters.emplace(cluster, state);
 }
 
-template <chip::TLV::TLVType T, AttributeQualityEnum Q>
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
-    ConcreteAttributeState<T, Q> state{};
-    mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
-}
-
-template <chip::TLV::TLVType T, AttributeQualityEnum Q>
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                                   const typename ClusterAttribute<T, Q>::underlying_t & value)
-{
-    ConcreteAttributeState<T, Q> state{ value };
+    AttributeState state{};
     mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
 }

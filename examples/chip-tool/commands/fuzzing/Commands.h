@@ -17,10 +17,9 @@
  */
 
 #pragma once
-
+#include "FuzzingCommands.h"
 #include "commands/common/CHIPCommand.h"
 #include "commands/common/Commands.h"
-#include "commands/fuzzing/FuzzingCommands.h"
 
 void registerCommandsFuzzing(Commands & commands, CredentialIssuerCommands * credsIssuerConfig)
 {
