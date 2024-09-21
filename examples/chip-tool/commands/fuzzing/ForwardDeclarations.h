@@ -44,13 +44,14 @@ std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const ch
 namespace TLV {
 class TLVDataPayloadHelper;
 class DecodedTLVElement;
+class DecodedTLVElementPrettyPrinter;
 
 inline TLVTag ExtractTagFromControlByte(uint16_t controlByte);
 inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte);
 } // namespace TLV
 namespace generation {
 const char * GenerateCommandSeedOnly(fs::path seedsDir);
-}
+} // namespace generation
 namespace utils {
 template <typename T, typename... Args>
 struct ExtendedVariant;

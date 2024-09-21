@@ -29,11 +29,7 @@ public:
     DecodedTLVElement(TLVType aType, uint8_t aBytes = 0, TLVTag aTag = TLVTag::Anonymous,
                       AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
         type(aType), length(aBytes), tag(aTag), quality(aQuality) {};
-    /**
-     * Given a DecodedTLVElement, returns the remaining length that can be written to the element.
-     * @returns 0 if the element has a fixed size or is a container type. Otherwise, returns the remaining length that can be
-     * written.
-     */
+
     TLVType type    = TLVType::kTLVType_NotSpecified;
     AnyType content = {};
     uint8_t length;
@@ -54,52 +50,19 @@ public:
         }
         return nullptr; // Default factory logic
     };
-    void Print(size_t indent = 0)
-    {
-        for (size_t i = 0; i < indent; i++)
-        {
-            std::cout << " ";
-        }
-        std::cout << "[Type: " << std::hex << static_cast<int16_t>(type) << ", Size or length: " << length << ", Tag: " << std::hex
-                  << static_cast<int16_t>(tag) << " (" << (quality == AttributeQualityEnum::kMandatory ? "mandatory" : "optional")
-                  << ")]" << std::endl;
-        for (size_t i = 0; i < indent; i++)
-        {
-            std::cout << " ";
-        }
-        std::visit(
-            [&](auto && arg) {
-                using arg_t = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<arg_t, ContainerType>)
-                {
-                    for (const auto & element : arg)
-                    {
-                        std::visit(
-                            [&](auto && nested) {
-                                using nested_t = std::decay_t<decltype(nested)>;
-                                if constexpr (std::is_same_v<nested_t, std::shared_ptr<TLV::DecodedTLVElement>>)
-                                {
-                                    nested->Print(indent + 2);
-                                }
-                                else
-                                {
-                                    PrintPrimitive<nested_t>(nested);
-                                }
-                            },
-                            element);
-                    }
-                }
-                else
-                {
-                    PrintPrimitive<arg_t>(arg);
-                }
-            },
-            content);
-    };
+};
+
+class DecodedTLVElementPrettyPrinter
+{
+public:
+    DecodedTLVElementPrettyPrinter(std::shared_ptr<TLV::DecodedTLVElement> element) : mElement(element) {}
+
+    void Print() { PrintDecodedElement(mElement); }
 
 private:
+    std::shared_ptr<TLV::DecodedTLVElement> mElement;
     template <typename T>
-    void PrintPrimitive(T value)
+    void PrintDecodedPrimitiveElement(T value, size_t indent)
     {
         if constexpr (std::is_same_v<T, std::string>)
         {
@@ -127,8 +90,80 @@ private:
             std::cout << "???" << std::endl;
         }
     }
-};
 
+    void PrintDecodedContainerElement(ContainerType & container, size_t indent)
+    {
+        for (const auto & element : container)
+        {
+            std::visit(
+                [&](auto && arg) {
+                    using nested_t = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<nested_t, std::shared_ptr<TLV::DecodedTLVElement>>)
+                    {
+                        PrintDecodedElement(arg, indent + 2);
+                    }
+                    else
+                    {
+                        PrintDecodedPrimitiveElement<nested_t>(arg, indent + 2);
+                    }
+                },
+                element);
+        }
+        if (container.size() == 0)
+        {
+            std::cout << "}";
+        }
+        else
+        {
+            Indent(indent);
+            std::cout << "}" << std::endl;
+        }
+    }
+
+    void PrintDecodedElement(std::shared_ptr<TLV::DecodedTLVElement> element, size_t indent = 0)
+    {
+        VerifyOrDie(element != nullptr);
+        std::visit(
+            [&](auto && arg) {
+                using arg_t = std::decay_t<decltype(arg)>;
+                PrintDecodedElementMetadata(element, indent);
+
+                if constexpr (std::is_same_v<arg_t, ContainerType>)
+                {
+                    PrintDecodedContainerElement(arg, indent);
+                }
+                else
+                {
+                    PrintDecodedPrimitiveElement<arg_t>(arg, indent);
+                }
+            },
+            element->content);
+    };
+
+    void PrintDecodedElementMetadata(std::shared_ptr<TLV::DecodedTLVElement> element, size_t indent = 0)
+    {
+        VerifyOrDie(element != nullptr);
+        Indent(indent);
+        std::cout << "[Type: 0x" << std::hex << static_cast<int16_t>(element->type)
+                  << ", Size or length: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
+                  << static_cast<int16_t>(element->tag) << " ("
+                  << (element->quality == AttributeQualityEnum::kMandatory ? "mandatory" : "optional");
+        std::visit(
+            [&](auto && arg) {
+                using arg_t = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<arg_t, ContainerType>)
+                {
+
+                    std::cout << "), size: " << arg.size() << "] = {" << std::endl;
+                }
+                else
+                {
+                    std::cout << ")] = ";
+                }
+            },
+            element->content);
+    }
+};
 } // namespace TLV
 } // namespace fuzzing
 } // namespace chip

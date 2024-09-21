@@ -21,6 +21,14 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
 using ContainerType = std::vector<typename utils::ExtendedVariant<PrimitiveType, std::shared_ptr<TLV::DecodedTLVElement>>::type>;
 using AnyType       = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 
+inline void Indent(size_t indent)
+{
+    for (size_t i = 0; i < indent; i++)
+    {
+        std::cout << " ";
+    }
+}
+
 const std::vector<std::pair<TLVType, uint8_t>> supportedTypes{ { TLVType::kTLVType_Array, 0 },
                                                                { TLVType::kTLVType_Boolean, 0 },
                                                                { TLVType::kTLVType_ByteString, 1 },

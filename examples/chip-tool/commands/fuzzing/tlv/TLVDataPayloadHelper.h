@@ -61,7 +61,7 @@ public:
     CHIP_ERROR Decode(std::shared_ptr<DecodedTLVElement> output);
     CHIP_ERROR Encode(std::shared_ptr<DecodedTLVElement> src);
     CHIP_ERROR WriteToDeviceState(std::shared_ptr<DecodedTLVElement> src, AttributeState & attributeState);
-    CHIP_ERROR PushToContainer(std::shared_ptr<DecodedTLVElement> element, DecodedTLVElement & dst);
+    CHIP_ERROR PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::shared_ptr<DecodedTLVElement> dst);
     CHIP_ERROR
     LoadClusterSnapshot(fs::path src, ClusterState & state, bool fromJSON = false);
     CHIP_ERROR LoadClusterSnapshot(fs::path src, chip::TLV::TLVWriter & writer, bool fromJSON = false);

@@ -11,8 +11,9 @@ void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chi
         helper.Print(path.mEndpointId, path.mClusterId, path.mCommandId);
         std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
         VerifyOrDie(output != nullptr);
+        output->content = ContainerType();
         helper.Decode(output);
-        output->Print();
+        TLV::DecodedTLVElementPrettyPrinter(output).Print();
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -29,8 +30,9 @@ void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::ap
         helper.Print(path);
         std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
         VerifyOrDie(output != nullptr);
+        output->content = ContainerType();
         helper.Decode(output);
-        output->Print();
+        TLV::DecodedTLVElementPrettyPrinter(output).Print();
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -47,8 +49,9 @@ void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader,
         helper.Print(eventHeader);
         std::shared_ptr<TLV::DecodedTLVElement> output = TLV::DecodedTLVElement::Create(TLVType::kTLVType_Structure);
         VerifyOrDie(output != nullptr);
+        output->content = ContainerType();
         helper.Decode(output);
-        output->Print();
+        TLV::DecodedTLVElementPrettyPrinter(output).Print();
 
         // TODO: Add saving cluster snapshot to file on a certain condition
     }
