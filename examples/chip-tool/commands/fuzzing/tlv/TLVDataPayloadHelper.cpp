@@ -141,7 +141,8 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::Decode(std::shared_ptr<DecodedTLVEle
         {
             TLVType outerContainer;
             mPayloadReader.EnterContainer(outerContainer);
-            err = Decode(newElement);
+            newElement->content = ContainerType();
+            err                 = Decode(newElement);
             VerifyOrReturnError(err == CHIP_NO_ERROR, err);
             mPayloadReader.ExitContainer(outerContainer);
         }
@@ -151,7 +152,7 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::Decode(std::shared_ptr<DecodedTLVEle
             err = DecodePrimitive(type, bytes, newElement);
         }
         VerifyOrReturnError(err == CHIP_NO_ERROR, err);
-        err = PushToContainer(std::move(newElement), *output);
+        err = PushToContainer(std::move(newElement), output);
         VerifyOrReturnError(err == CHIP_NO_ERROR, err);
         err = mPayloadReader.Next();
     }
@@ -182,7 +183,8 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::WriteToDeviceState(std::shared_ptr<D
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<DecodedTLVElement> element, DecodedTLVElement & dst)
+CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<DecodedTLVElement> element,
+                                                            std::shared_ptr<DecodedTLVElement> dst)
 {
     return std::visit(
         [&](auto & container) -> CHIP_ERROR {
@@ -195,7 +197,7 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<Deco
             else
                 return CHIP_ERROR_WRONG_TLV_TYPE;
         },
-        dst.content);
+        dst->content);
 }
 
 CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::LoadClusterSnapshot(fs::path src, fuzz::ClusterState & state, bool fromJSON)
