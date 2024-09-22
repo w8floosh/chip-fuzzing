@@ -140,6 +140,7 @@ public:
     ~DeviceStateManager() {};
 
     const auto ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, bool current = true);
+    AttributeState & GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
     void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, const AnyType & aValue);
 
     auto List() { return mDeviceState.nodes; }
@@ -161,6 +162,7 @@ public:
 
     // The Add methods are used to add new nodes, endpoints, clusters, and attributes to the device state.
     void Add(NodeId node);
+    void Add(NodeId node, EndpointId endpoint);
     void Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);

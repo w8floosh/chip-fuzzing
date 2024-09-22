@@ -119,23 +119,23 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
         for (auto & cluster : deviceState.List(id, endpoint.first))
         {
             std::string readAllClusterAttributesCommand = GetReadAllClusterAttributesCommand(id, endpoint.first, cluster.first);
-            std::string readAllClusterEventsCommand     = GetReadAllClusterEventsCommand(id, endpoint.first, cluster.first);
+            // std::string readAllClusterEventsCommand     = GetReadAllClusterEventsCommand(id, endpoint.first, cluster.first);
 
             ExecuteCommand(readAllClusterAttributesCommand.c_str(), &status);
             VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-            ExecuteCommand(readAllClusterEventsCommand.c_str(), &status);
-            VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            // ExecuteCommand(readAllClusterEventsCommand.c_str(), &status);
+            // VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
             std::string subscribeAllClusterAttributesCommand =
                 GetSubscribeAllClusterAttributesCommand(id, endpoint.first, cluster.first);
-            std::string subscribeAllClusterEventsCommand = GetSubscribeAllClusterEventCommand(id, endpoint.first, cluster.first);
+            // std::string subscribeAllClusterEventsCommand = GetSubscribeAllClusterEventCommand(id, endpoint.first, cluster.first);
 
             ExecuteCommand(subscribeAllClusterAttributesCommand.c_str(), &status);
             VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-            ExecuteCommand(subscribeAllClusterEventsCommand.c_str(), &status);
-            VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            // ExecuteCommand(subscribeAllClusterEventsCommand.c_str(), &status);
+            // VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
         }
     }
 
@@ -158,11 +158,11 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
         mStatefulFuzzingEnabled = true;
         mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument.Value()));
         VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_FILESYSTEM_ERROR);
-        fuzz::Fuzzer::Initialize(mSeedDirectory, kGenerationFunc, mOutputDirectory.Value());
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, mOutputDirectory.Value());
     }
     else
     {
-        fuzz::Fuzzer::Initialize(mSeedDirectory, kGenerationFunc);
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc);
     }
 
     kGenerationFunc = nullptr;
@@ -176,11 +176,34 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     CHIP_ERROR err = InitializeFuzzer();
     VerifyOrReturnError(CHIP_NO_ERROR == err, err);
 
-    const char * kExampleCommand = "onoff on ";
-    VerifyOrReturnError(CHIP_NO_ERROR == AcquireRemoteDataModel(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    const char * kExampleCommandOn  = "onoff on ";
+    const char * kExampleCommandOff = "onoff off ";
 
+    VerifyOrReturnError(CHIP_NO_ERROR == AcquireRemoteDataModel(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    // auto fuzzer = fuzz::Fuzzer::GetInstance();
     int status = 0;
-    ExecuteCommand(std::string(kExampleCommand).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
+
+    for (int i = 0; i < 10; i++)
+    {
+        if (i % 2 == 0)
+            ExecuteCommand(std::string(kExampleCommandOn).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
+        else
+            ExecuteCommand(std::string(kExampleCommandOff).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
+    }
+    // for (const auto & endpoint : fuzzer->GetDeviceStateManager()->List(mDestinationId))
+    // {
+    //     for (const auto & cluster : endpoint.second.clusters)
+    //     {
+    //         for (uint32_t i = 0; i < mIterations.Value(); i++)
+    //         {
+    //             // TODO: For each generated command, we should execute an extra read command to verify the new state of the
+    //             // attribute.
+    //             const char * command = GenerateCommand(cluster.first);
+    //             ExecuteCommand(command, &status);
+    //             VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NOT_IMPLEMENTED);
+    //         }
+    //     }
+    // }
     SetCommandExitStatus(CHIP_NO_ERROR);
     return CHIP_NO_ERROR;
 };
