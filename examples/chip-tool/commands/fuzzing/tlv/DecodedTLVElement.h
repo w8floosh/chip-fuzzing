@@ -2,11 +2,12 @@
 #include "../AttributeFactory.h"
 #include "../ForwardDeclarations.h"
 #include "../Utils.h"
+#include "../Visitors.h"
 #include <iostream>
+namespace fuzz = chip::fuzzing;
 namespace chip {
 namespace fuzzing {
 namespace TLV {
-using chip::fuzzing::AttributeQualityEnum;
 /**
  * @brief Encodes a TLV element with a specific type, length and tag using the C++ standard types.
  *
@@ -27,25 +28,25 @@ public:
     DecodedTLVElement(TLVType aType, uint8_t aBytes = 0, TLVTag aTag = TLVTag::Anonymous) :
         type(aType), length(aBytes), tag(aTag) {};
     DecodedTLVElement(TLVType aType, uint8_t aBytes = 0, TLVTag aTag = TLVTag::Anonymous,
-                      AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
+                      fuzz::AttributeQualityEnum aQuality = fuzz::AttributeQualityEnum::kMandatory) :
         type(aType), length(aBytes), tag(aTag), quality(aQuality) {};
 
     TLVType type    = TLVType::kTLVType_NotSpecified;
     AnyType content = {};
     uint8_t length;
     TLVTag tag;
-    AttributeQualityEnum quality;
+    fuzz::AttributeQualityEnum quality;
 
     bool IsContainer() { return std::holds_alternative<ContainerType>(content); };
-    static std::shared_ptr<TLV::DecodedTLVElement> Create(TLVType type, uint8_t length = 0, TLVTag tag = TLVTag::Anonymous,
-                                                          AttributeQualityEnum quality = AttributeQualityEnum::kMandatory)
+    static std::shared_ptr<DecodedTLVElement> Create(TLVType type, uint8_t length = 0, TLVTag tag = TLVTag::Anonymous,
+                                                     fuzz::AttributeQualityEnum quality = fuzz::AttributeQualityEnum::kMandatory)
     {
         auto key = std::make_pair(type, length);
         for (const auto & supportedType : supportedTypes)
         {
             if (supportedType == key)
             {
-                return std::make_shared<TLV::DecodedTLVElement>(type, length, tag, quality);
+                return std::make_shared<DecodedTLVElement>(type, length, tag, quality);
             }
         }
         return nullptr; // Default factory logic
@@ -55,12 +56,19 @@ public:
 class DecodedTLVElementPrettyPrinter
 {
 public:
-    DecodedTLVElementPrettyPrinter(std::shared_ptr<TLV::DecodedTLVElement> element) : mElement(element) {}
+    DecodedTLVElementPrettyPrinter(std::shared_ptr<DecodedTLVElement> element) : mElement(element) {}
 
     void Print() { PrintDecodedElement(mElement); }
 
 private:
-    std::shared_ptr<TLV::DecodedTLVElement> mElement;
+    std::shared_ptr<DecodedTLVElement> mElement;
+
+    friend void fuzz::Visitors::TLV::PrintDecodedElement(DecodedTLVElementPrettyPrinter * printer,
+                                                         std::shared_ptr<DecodedTLVElement> element, size_t indent);
+    friend void fuzz::Visitors::TLV::PrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer,
+                                                                 std::shared_ptr<DecodedTLVElement> element, size_t indent);
+    friend void fuzz::Visitors::TLV::PrintElementInDecodedContainerElement(DecodedTLVElementPrettyPrinter * printer,
+                                                                           ContainerInnerType element, size_t indent);
     template <typename T>
     void PrintDecodedPrimitiveElement(T value, size_t indent)
     {
@@ -95,19 +103,7 @@ private:
     {
         for (const auto & element : container)
         {
-            std::visit(
-                [&](auto && arg) {
-                    using nested_t = std::decay_t<decltype(arg)>;
-                    if constexpr (std::is_same_v<nested_t, std::shared_ptr<TLV::DecodedTLVElement>>)
-                    {
-                        PrintDecodedElement(arg, indent + 2);
-                    }
-                    else
-                    {
-                        PrintDecodedPrimitiveElement<nested_t>(arg, indent + 2);
-                    }
-                },
-                element);
+            Visitors::TLV::PrintElementInDecodedContainerElement(this, element, indent);
         }
         if (container.size() == 0)
         {
@@ -120,48 +116,21 @@ private:
         }
     }
 
-    void PrintDecodedElement(std::shared_ptr<TLV::DecodedTLVElement> element, size_t indent = 0)
+    void PrintDecodedElement(std::shared_ptr<DecodedTLVElement> element, size_t indent = 0)
     {
         VerifyOrDie(element != nullptr);
-        std::visit(
-            [&](auto && arg) {
-                using arg_t = std::decay_t<decltype(arg)>;
-                PrintDecodedElementMetadata(element, indent);
-
-                if constexpr (std::is_same_v<arg_t, ContainerType>)
-                {
-                    PrintDecodedContainerElement(arg, indent);
-                }
-                else
-                {
-                    PrintDecodedPrimitiveElement<arg_t>(arg, indent);
-                }
-            },
-            element->content);
+        Visitors::TLV::PrintDecodedElement(this, element, indent);
     };
 
-    void PrintDecodedElementMetadata(std::shared_ptr<TLV::DecodedTLVElement> element, size_t indent = 0)
+    void PrintDecodedElementMetadata(std::shared_ptr<DecodedTLVElement> element, size_t indent = 0)
     {
         VerifyOrDie(element != nullptr);
         Indent(indent);
         std::cout << "[Type: 0x" << std::hex << static_cast<int16_t>(element->type)
                   << ", Size or length: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
                   << static_cast<int16_t>(element->tag) << " ("
-                  << (element->quality == AttributeQualityEnum::kMandatory ? "mandatory" : "optional");
-        std::visit(
-            [&](auto && arg) {
-                using arg_t = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_same_v<arg_t, ContainerType>)
-                {
-
-                    std::cout << "), size: " << arg.size() << "] = {" << std::endl;
-                }
-                else
-                {
-                    std::cout << ")] = ";
-                }
-            },
-            element->content);
+                  << (element->quality == fuzz::AttributeQualityEnum::kMandatory ? "mandatory" : "optional");
+        Visitors::TLV::PrintDecodedElementMetadata(this, element, indent);
     }
 };
 } // namespace TLV
