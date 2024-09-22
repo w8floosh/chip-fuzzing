@@ -426,7 +426,12 @@
                 "2000"
             ],
             "cwd": "${workspaceFolder}",
-            "breakpointMode": "path"
+            "breakpointMode": "path",
+            "stdio": [
+                null,
+                "${workspaceFolder}/out/debug/standalone/chip-tool-fuzzing.log",
+                "${workspaceFolder}/out/debug/standalone/chip-tool-fuzzing-errors.log"
+            ]
         },
 
         {

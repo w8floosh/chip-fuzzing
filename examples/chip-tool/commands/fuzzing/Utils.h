@@ -1,5 +1,7 @@
 #pragma once
 #include "ForwardDeclarations.h"
+#include <iostream>
+
 namespace chip {
 namespace fuzzing {
 namespace utils {
@@ -18,8 +20,9 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
     using type = std::variant<Args0..., Args1...>;
 };
 } // namespace utils
-using ContainerType = std::vector<typename utils::ExtendedVariant<PrimitiveType, std::shared_ptr<TLV::DecodedTLVElement>>::type>;
-using AnyType       = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
+using ContainerInnerType = typename utils::ExtendedVariant<PrimitiveType, std::shared_ptr<TLV::DecodedTLVElement>>::type;
+using ContainerType      = std::vector<ContainerInnerType>;
+using AnyType            = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 
 inline void Indent(size_t indent)
 {

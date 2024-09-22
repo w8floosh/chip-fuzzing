@@ -1,6 +1,7 @@
 #pragma once
 #include "ForwardDeclarations.h"
 #include "Utils.h"
+#include "Visitors.h"
 
 namespace DM = chip::app::DataModel;
 namespace chip {
@@ -57,25 +58,7 @@ struct AttributeWrapper
     uint8_t length;
     // TODO: Add support for nullable attributes
     std::variant<std::monostate, AnyType, chip::Optional<AnyType>> value = {};
-    AnyType * Read()
-    {
-        return std::visit(
-            [&](auto & v) -> AnyType * {
-                using T = std::decay_t<decltype(v)>; // T is the type of the variant
-                if constexpr (std::is_same_v<T, AnyType>)
-                {
-                    return &v;
-                }
-                else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
-                {
-                    VerifyOrReturnValue(v.HasValue(), nullptr);
-                    return &v.Value();
-                }
-                else
-                    return nullptr;
-            },
-            value);
-    }
+    AnyType * Read() { return Visitors::AttributeWrapperRead(this); }
     CHIP_ERROR Write(const AnyType & aValue)
     {
         size_t typeIndexBeforeWrite           = value.index();
@@ -83,29 +66,8 @@ struct AttributeWrapper
         size_t typeIndexAfterWrite            = UINT64_MAX;
         size_t underlyingTypeIndexAfterWrite  = UINT64_MAX;
 
-        ReturnErrorOnFailure(std::visit(
-            [&](const auto & v) {
-                using T = std::decay_t<decltype(value)>; // T is the type of the variant of the value holder (std::monostate,
-                                                         // AnyType or chip::Optional<AnyType>)
-                using VT = std::decay_t<decltype(v)>;    // VT is the type of the variant of the argument (one of the PrimitiveType
-                                                         // variants or ContainerType)
-                if constexpr (std::is_same_v<T, AnyType>)
-                {
-                    value = std::get<VT>(v);
-                }
-                else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
-                {
-                    value = chip::Optional<VT>::Value(std::get<VT>(v));
-                }
-                else
-                {
-                    return CHIP_ERROR_INTERNAL;
-                }
-                typeIndexAfterWrite           = value.index();
-                underlyingTypeIndexAfterWrite = Read()->index();
-                return CHIP_NO_ERROR;
-            },
-            aValue));
+        ReturnErrorOnFailure(
+            Visitors::AttributeWrapperWriteOrFail(this, typeIndexAfterWrite, underlyingTypeIndexAfterWrite, aValue));
         VerifyOrReturnError(typeIndexAfterWrite != UINT64_MAX && underlyingTypeIndexAfterWrite != UINT64_MAX, CHIP_ERROR_INTERNAL);
         VerifyOrReturnError(typeIndexBeforeWrite != typeIndexAfterWrite, CHIP_FUZZER_ERROR_ATTRIBUTE_TYPE_MISMATCH);
         VerifyOrReturnError(underlyingTypeIndexBeforeWrite != underlyingTypeIndexAfterWrite,

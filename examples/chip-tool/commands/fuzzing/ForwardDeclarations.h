@@ -4,7 +4,6 @@
 #include <functional>
 #include <lib/core/CHIPCore.h>
 #include <lib/core/CHIPError.h>
-#include <lib/core/Optional.h>
 #include <optional>
 #include <string>
 #include <variant>

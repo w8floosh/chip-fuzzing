@@ -1,5 +1,8 @@
 #include "Fuzzing.h"
+#include "Visitors.h"
 #include "generation/Wrappers.cpp"
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 
 namespace fuzz = chip::fuzzing;
 void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
@@ -14,6 +17,8 @@ void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chi
         output->content = ContainerType();
         helper.Decode(output);
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
+        // TODO: To modify the local device state, we process the subscription response
+        // TODO: [DISCLAIMER] We assume the request-response-subscription_response flow is synchronous (in this order)
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -33,6 +38,18 @@ void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::ap
         output->content = ContainerType();
         helper.Decode(output);
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
+
+        // TODO: Read the new value of the attribute and update the device state accordingly
+        if (path.mClusterId == chip::app::Clusters::Descriptor::Id)
+        {
+            ProcessDescriptorClusterResponse(output, path, mCurrentDestination);
+        }
+        else
+        {
+            helper.WriteToDeviceState(
+                std::move(output),
+                mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId));
+        }
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -52,8 +69,6 @@ void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader,
         output->content = ContainerType();
         helper.Decode(output);
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
-
-        // TODO: Add saving cluster snapshot to file on a certain condition
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
@@ -95,6 +110,24 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     ChipLogProgress(chipTool, "Logged well-formed command: %s", command);
 
     return CHIP_NO_ERROR;
+}
+
+void fuzz::Fuzzer::ProcessDescriptorClusterResponse(std::shared_ptr<TLV::DecodedTLVElement> decoded,
+                                                    const chip::app::ConcreteDataAttributePath & path, NodeId node)
+{
+    switch (path.mAttributeId)
+    {
+    case chip::app::Clusters::Descriptor::Attributes::PartsList::Id: {
+        Visitors::TLV::ProcessDescriptorClusterResponse<EndpointId>(std::move(decoded), path, node);
+        break;
+    }
+    case chip::app::Clusters::Descriptor::Attributes::DeviceTypeList::Id:
+    case chip::app::Clusters::Descriptor::Attributes::ServerList::Id: {
+        // This case also applies to the DeviceTypeId: both types are uint32_t
+        Visitors::TLV::ProcessDescriptorClusterResponse<ClusterId>(std::move(decoded), path, node);
+        break;
+    }
+    }
 }
 
 std::function<const char *(fs::path)> fuzz::ConvertStringToGenerationFunction(const char * key)

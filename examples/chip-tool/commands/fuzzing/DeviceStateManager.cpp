@@ -80,6 +80,11 @@ const auto fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpo
     VerifyOrDie(attributeState != nullptr);
     return current ? attributeState->ReadCurrent() : attributeState->ReadLast();
 }
+fuzz::AttributeState & fuzz::DeviceStateManager::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
+                                                                   AttributeId attribute)
+{
+    return ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+}
 
 void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
                                               const AnyType & aValue)
@@ -92,19 +97,38 @@ void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, 
 // TODO: Consider variadic refactoring
 void fuzz::DeviceStateManager::Add(NodeId node)
 {
+    VerifyOrReturn(mDeviceState(node) == nullptr);
     NodeState state{};
     mDeviceState.nodes.emplace(node, state);
 }
+
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
+{
+    VerifyOrReturn(mDeviceState(node) != nullptr && mDeviceState(node, endpoint) == nullptr);
+    EndpointState state{};
+    state.endpointId = endpoint;
+    mDeviceState(node)->endpoints.emplace(endpoint, state);
+}
+
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType)
 {
-    EndpointState state{};
-    state.endpointId   = endpoint;
-    state.deviceTypeId = deviceType;
-    mDeviceState(node)->endpoints.emplace(endpoint, state);
+    VerifyOrReturn(mDeviceState(node) != nullptr);
+    if (mDeviceState(node, endpoint) != nullptr)
+    {
+        mDeviceState(node, endpoint)->deviceTypeId = deviceType;
+    }
+    else
+    {
+        EndpointState state{};
+        state.endpointId   = endpoint;
+        state.deviceTypeId = deviceType;
+        mDeviceState(node)->endpoints.emplace(endpoint, state);
+    }
 }
 
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision = 5)
 {
+    VerifyOrReturn(mDeviceState(node, endpoint) != nullptr && mDeviceState(node, endpoint, cluster) == nullptr);
     ClusterState state{};
     state.clusterId       = cluster;
     state.clusterRevision = revision;
@@ -113,6 +137,9 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
 
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
+    VerifyOrReturn(mDeviceState(node, endpoint, cluster) != nullptr &&
+                   ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute) == nullptr);
+
     AttributeState state{};
     mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
 }

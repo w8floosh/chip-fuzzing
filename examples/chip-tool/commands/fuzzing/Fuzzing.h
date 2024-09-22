@@ -44,6 +44,9 @@ public:
     void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
                              CHIP_ERROR expectedError = CHIP_NO_ERROR);
 
+    void ProcessDescriptorClusterResponse(std::shared_ptr<TLV::DecodedTLVElement> decoded,
+                                          const chip::app::ConcreteDataAttributePath & path, NodeId node);
+
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
 
 protected:
@@ -51,15 +54,18 @@ protected:
     friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
 
-    static void Initialize(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc)
+    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc)
     {
-        std::function<Fuzzer()> init = [seedsDirectory, generationFunc]() { return Fuzzer(seedsDirectory, generationFunc); };
+        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc]() {
+            return Fuzzer(dst, seedsDirectory, generationFunc);
+        };
         GetInstance(&init);
     }
-    static void Initialize(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory)
+    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
+                           fs::path outputDirectory)
     {
-        std::function<Fuzzer()> init = [seedsDirectory, generationFunc, outputDirectory]() {
-            return Fuzzer(seedsDirectory, generationFunc, outputDirectory);
+        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, outputDirectory]() {
+            return Fuzzer(dst, seedsDirectory, generationFunc, outputDirectory);
         };
         GetInstance(&init);
     }
@@ -73,9 +79,9 @@ protected:
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
 
 private:
-    Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
         mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc) {};
-    Fuzzer(fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory) :
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory) :
         mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc)
     {
         mOutputDirectory.SetValue(outputDirectory);
@@ -87,6 +93,7 @@ private:
 
     // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
     std::function<const char *(fs::path)> mGenerationFunc;
+    NodeId mCurrentDestination;
 };
 
 std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
