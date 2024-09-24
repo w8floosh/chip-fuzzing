@@ -11,52 +11,21 @@ using DecodedTLVElementPrettyPrinter = chip::fuzzing::TLV::DecodedTLVElementPret
 
 namespace TLV {
 
-void PrintElementInDecodedContainerElement(DecodedTLVElementPrettyPrinter * printer, ContainerInnerType element, size_t indent);
 void PrintDecodedElement(DecodedTLVElementPrettyPrinter * printer, std::shared_ptr<DecodedTLVElement> element, size_t indent);
-void PrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer, std::shared_ptr<DecodedTLVElement> element,
-                                 size_t indent);
+void FinalizePrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer, std::shared_ptr<DecodedTLVElement> element,
+                                         size_t indent);
 CHIP_ERROR
 PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::shared_ptr<DecodedTLVElement> dst);
 
 template <typename T>
-T IdTypeConverter(ContainerInnerType id)
-{
-    return std::visit(
-        [](auto && arg) -> T {
-            using arg_t = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_convertible_v<arg_t, T>)
-            {
-                return static_cast<T>(arg);
-            }
-            else if constexpr (std::is_same_v<T, EndpointId>)
-            {
-                return kInvalidEndpointId;
-            }
-            else if constexpr (std::is_same_v<T, ClusterId>)
-            {
-                // This case also applies to the DeviceTypeId: both types are uint32_t
-                return kInvalidClusterId;
-            }
-        },
-        id);
-}
+T ConvertToIdType(std::shared_ptr<DecodedTLVElement> id);
+extern template EndpointId ConvertToIdType<EndpointId>(std::shared_ptr<DecodedTLVElement> id);
+extern template ClusterId ConvertToIdType<ClusterId>(std::shared_ptr<DecodedTLVElement> id);
 
+// TODO: It is useful to template this function to allow for more types to be converted?
 template <typename T>
-T PrimitiveElementContentConverter(std::shared_ptr<DecodedTLVElement> element)
-{
-    VerifyOrDie(!std::holds_alternative<std::shared_ptr<DecodedTLVElement>>(element->content));
-    return std::visit(
-        [](auto && arg) -> T {
-            using arg_t = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_convertible_v<arg_t, T>)
-            {
-                return static_cast<T>(arg);
-            }
-            else
-                throw std::runtime_error("Invalid variant type conversion");
-        },
-        std::get<std::shared_ptr<DecodedTLVElement>>(element->content)->content);
-}
+T TryConvertPrimitiveType(std::shared_ptr<DecodedTLVElement> element);
+extern template uint32_t TryConvertPrimitiveType<uint32_t>(std::shared_ptr<DecodedTLVElement> element);
 
 template <typename T>
 void ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVElement> decoded, const chip::app::ConcreteDataAttributePath & path,
@@ -71,6 +40,9 @@ extern template void ProcessDescriptorClusterResponse<ClusterId>(std::shared_ptr
 AnyType * AttributeWrapperRead(AttributeWrapper * attribute);
 CHIP_ERROR AttributeWrapperWriteOrFail(AttributeWrapper * attribute, size_t & typeIndexAfterWrite,
                                        size_t underlyingTypeIndexAfterWrite, const AnyType & aValue);
+
+std::string AttributeValueAsString(const AnyType * attr);
+std::string AttributeTypeAsString(const AnyType * attr);
 
 } // namespace Visitors
 } // namespace fuzzing

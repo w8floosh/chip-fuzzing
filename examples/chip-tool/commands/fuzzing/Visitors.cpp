@@ -4,23 +4,46 @@
 
 namespace Visitors = chip::fuzzing::Visitors;
 
-void Visitors::TLV::PrintElementInDecodedContainerElement(DecodedTLVElementPrettyPrinter * printer, ContainerInnerType element,
-                                                          size_t indent)
+template <typename T>
+T Visitors::TLV::ConvertToIdType(std::shared_ptr<DecodedTLVElement> element)
 {
-    std::visit(
-        [&](auto && arg) {
-            using nested_t = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<nested_t, std::shared_ptr<DecodedTLVElement>>)
+    uint32_t primitive = TryConvertPrimitiveType<uint32_t>(element);
+    if (primitive == std::numeric_limits<uint32_t>::max())
+    {
+        if constexpr (std::is_same_v<T, EndpointId>)
+        {
+            return kInvalidEndpointId;
+        }
+        else
+        {
+            return kInvalidClusterId;
+        }
+    }
+    return static_cast<T>(primitive);
+}
+template chip::EndpointId Visitors::TLV::ConvertToIdType<chip::EndpointId>(std::shared_ptr<DecodedTLVElement> element);
+template chip::ClusterId Visitors::TLV::ConvertToIdType<chip::ClusterId>(std::shared_ptr<DecodedTLVElement> element);
+
+template <typename T>
+T Visitors::TLV::TryConvertPrimitiveType(std::shared_ptr<DecodedTLVElement> element)
+{
+    VerifyOrDie(!std::holds_alternative<ContainerType>(element->content));
+    return std::visit(
+        [](auto && arg) -> T {
+            using arg_t = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_convertible_v<arg_t, T>)
             {
-                printer->PrintDecodedElement(arg, indent + 2);
+                return static_cast<T>(arg);
             }
             else
             {
-                printer->PrintDecodedPrimitiveElement<nested_t>(arg, indent + 2);
+                // TODO: Consider another solution without exceptions
+                return std::numeric_limits<T>::max();
             }
         },
-        element);
+        element->content);
 }
+template uint32_t Visitors::TLV::TryConvertPrimitiveType<uint32_t>(std::shared_ptr<DecodedTLVElement> element);
 
 void Visitors::TLV::PrintDecodedElement(DecodedTLVElementPrettyPrinter * printer, std::shared_ptr<DecodedTLVElement> element,
                                         size_t indent)
@@ -42,15 +65,14 @@ void Visitors::TLV::PrintDecodedElement(DecodedTLVElementPrettyPrinter * printer
         element->content);
 }
 
-void Visitors::TLV::PrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer,
-                                                std::shared_ptr<DecodedTLVElement> element, size_t indent)
+void Visitors::TLV::FinalizePrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer,
+                                                        std::shared_ptr<DecodedTLVElement> element, size_t indent)
 {
     std::visit(
         [&](auto && arg) {
             using arg_t = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<arg_t, ContainerType>)
             {
-
                 std::cout << "), size: " << arg.size() << "] = {" << std::endl;
             }
             else
@@ -65,26 +87,25 @@ template <typename T>
 void Visitors::TLV::ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVElement> decoded,
                                                      const chip::app::ConcreteDataAttributePath & path, NodeId node)
 {
+    // decoded is a structure which first element is an array (container inside root container)
     std::visit(
         [&](auto && arg) {
             using arg_t = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<arg_t, ContainerType>)
             {
-                // device type list is retrieved for each endpoint, but each endpoint can have only one device type (singleton
-                // array)
-                auto list      = std::get<std::shared_ptr<DecodedTLVElement>>(arg[0]);
-                auto container = std::get<ContainerType>(list->content);
+                VerifyOrReturn(std::holds_alternative<ContainerType>(arg[0]->content));
+                auto container = std::get<ContainerType>(arg[0]->content);
                 for (const auto & element : container)
                 {
                     auto deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
                     if constexpr (std::is_same_v<T, EndpointId>)
                     {
-                        deviceState->Add(node, IdTypeConverter<EndpointId>(element));
+                        deviceState->Add(node, ConvertToIdType<EndpointId>(element));
                     }
-                    else if constexpr (std::is_same_v<T, ClusterId>)
+                    else
                     {
                         // This case also applies to the DeviceTypeId: both types are uint32_t
-                        deviceState->Add(node, path.mEndpointId, IdTypeConverter<ClusterId>(element));
+                        deviceState->Add(node, path.mEndpointId, ConvertToIdType<ClusterId>(element));
                     }
                 }
             }
@@ -162,4 +183,101 @@ CHIP_ERROR Visitors::AttributeWrapperWriteOrFail(AttributeWrapper * attribute, s
             return CHIP_NO_ERROR;
         },
         aValue);
+}
+
+std::string Visitors::AttributeValueAsString(const AnyType * attr)
+{
+    return "";
+    // VerifyOrReturnValue(attr != nullptr, std::string("null"));
+    // return std::visit(
+    //     [&](auto & v) {
+    //         using T = std::decay_t<decltype(v)>;
+    //         if constexpr (std::is_same_v<T, bool>)
+    //         {
+    //             return v ? "true" : "false";
+    //         }
+    //         else if constexpr (std::is_same_v<T, std::string>)
+    //         {
+    //             return v;
+    //         }
+    //         else if constexpr (std::is_same_v<T, chip::ByteSpan>)
+    //         {
+    //             return std::string(v.data(), v.size());
+    //         }
+    //         else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
+    //     },
+    //     *attr);
+}
+
+std::string Visitors::AttributeTypeAsString(const AnyType * attr)
+{
+    VerifyOrReturnValue(attr != nullptr, std::string("nullable"));
+    return std::visit(
+        [&](auto & v) -> std::string {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, bool>)
+            {
+                return v ? std::string("true") : std::string("false");
+            }
+            else if constexpr (std::is_same_v<T, char *>)
+            {
+                return std::string("byte string");
+            }
+            else if constexpr (std::is_same_v<T, uint8_t>)
+            {
+                return std::string("unsigned integer 1");
+            }
+            else if constexpr (std::is_same_v<T, uint16_t>)
+            {
+                return std::string("unsigned integer 2");
+            }
+            else if constexpr (std::is_same_v<T, uint32_t>)
+            {
+                return std::string("unsigned integer 4");
+            }
+            else if constexpr (std::is_same_v<T, uint64_t>)
+            {
+                return std::string("unsigned integer 8");
+            }
+            else if constexpr (std::is_same_v<T, int8_t>)
+            {
+                return std::string("signed integer 1");
+            }
+            else if constexpr (std::is_same_v<T, int16_t>)
+            {
+                return std::string("signed integer 2");
+            }
+            else if constexpr (std::is_same_v<T, int32_t>)
+            {
+                return std::string("signed integer 4");
+            }
+            else if constexpr (std::is_same_v<T, int64_t>)
+            {
+                return std::string("signed integer 8");
+            }
+            else if constexpr (std::is_same_v<T, float>)
+            {
+                return std::string("float");
+            }
+            else if constexpr (std::is_same_v<T, double>)
+            {
+                return std::string("double");
+            }
+            else if constexpr (std::is_same_v<T, std::string>)
+            {
+                return std::string("utf8 string");
+            }
+            else if constexpr (std::is_same_v<T, ContainerType>)
+            {
+                return std::string("container");
+            }
+            else if constexpr (std::is_same_v<T, std::nullopt_t>)
+            {
+                // TODO: Find a way to retrieve null values underlying type
+                return std::string("nullable");
+            }
+            else
+                return std::string("unknown");
+        },
+        *attr);
 }

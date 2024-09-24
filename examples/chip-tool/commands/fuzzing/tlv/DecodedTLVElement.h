@@ -56,19 +56,21 @@ public:
 class DecodedTLVElementPrettyPrinter
 {
 public:
-    DecodedTLVElementPrettyPrinter(std::shared_ptr<DecodedTLVElement> element) : mElement(element) {}
+    DecodedTLVElementPrettyPrinter(std::shared_ptr<DecodedTLVElement> element) : mRootElement(element) {}
 
-    void Print() { PrintDecodedElement(mElement); }
+    void Print()
+    {
+        VerifyOrDie(mRootElement != nullptr);
+        Visitors::TLV::PrintDecodedElement(this, mRootElement, 0);
+    }
 
 private:
-    std::shared_ptr<DecodedTLVElement> mElement;
+    std::shared_ptr<DecodedTLVElement> mRootElement;
 
     friend void fuzz::Visitors::TLV::PrintDecodedElement(DecodedTLVElementPrettyPrinter * printer,
                                                          std::shared_ptr<DecodedTLVElement> element, size_t indent);
-    friend void fuzz::Visitors::TLV::PrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer,
-                                                                 std::shared_ptr<DecodedTLVElement> element, size_t indent);
-    friend void fuzz::Visitors::TLV::PrintElementInDecodedContainerElement(DecodedTLVElementPrettyPrinter * printer,
-                                                                           ContainerInnerType element, size_t indent);
+    friend void fuzz::Visitors::TLV::FinalizePrintDecodedElementMetadata(DecodedTLVElementPrettyPrinter * printer,
+                                                                         std::shared_ptr<DecodedTLVElement> element, size_t indent);
     template <typename T>
     void PrintDecodedPrimitiveElement(T value, size_t indent)
     {
@@ -103,7 +105,7 @@ private:
     {
         for (const auto & element : container)
         {
-            Visitors::TLV::PrintElementInDecodedContainerElement(this, element, indent);
+            Visitors::TLV::PrintDecodedElement(this, element, indent);
         }
         if (container.size() == 0)
         {
@@ -116,12 +118,6 @@ private:
         }
     }
 
-    void PrintDecodedElement(std::shared_ptr<DecodedTLVElement> element, size_t indent = 0)
-    {
-        VerifyOrDie(element != nullptr);
-        Visitors::TLV::PrintDecodedElement(this, element, indent);
-    };
-
     void PrintDecodedElementMetadata(std::shared_ptr<DecodedTLVElement> element, size_t indent = 0)
     {
         VerifyOrDie(element != nullptr);
@@ -130,7 +126,7 @@ private:
                   << ", Size or length: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
                   << static_cast<int16_t>(element->tag) << " ("
                   << (element->quality == fuzz::AttributeQualityEnum::kMandatory ? "mandatory" : "optional");
-        Visitors::TLV::PrintDecodedElementMetadata(this, element, indent);
+        Visitors::TLV::FinalizePrintDecodedElementMetadata(this, element, indent);
     }
 };
 } // namespace TLV
