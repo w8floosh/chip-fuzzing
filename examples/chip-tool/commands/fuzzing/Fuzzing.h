@@ -72,11 +72,17 @@ protected:
 
     fs::path mSeedsDirectory;
     Optional<fs::path> mOutputDirectory = NullOptional;
+    Optional<fs::path> mHistoryPath     = NullOptional;
     DeviceStateManager mDeviceStateManager;
     std::shared_ptr<Oracle> mOracle;
 
     // TODO: Should the fuzzer log oracle outputs too?
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
+    CHIP_ERROR AppendToHistory(const char * command)
+    {
+        mCommandHistory.push_back(std::string(command));
+        return CHIP_NO_ERROR;
+    }
 
 private:
     Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
@@ -94,6 +100,7 @@ private:
     // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
     std::function<const char *(fs::path)> mGenerationFunc;
     NodeId mCurrentDestination;
+    std::vector<std::string> mCommandHistory;
 };
 
 std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);

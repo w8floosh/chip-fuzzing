@@ -20,9 +20,8 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
     using type = std::variant<Args0..., Args1...>;
 };
 } // namespace utils
-using ContainerInnerType = typename utils::ExtendedVariant<PrimitiveType, std::shared_ptr<TLV::DecodedTLVElement>>::type;
-using ContainerType      = std::vector<ContainerInnerType>;
-using AnyType            = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
+using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
+using AnyType       = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 
 inline void Indent(size_t indent)
 {

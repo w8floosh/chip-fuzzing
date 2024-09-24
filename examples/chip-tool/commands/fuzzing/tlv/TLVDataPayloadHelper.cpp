@@ -164,11 +164,6 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::Encode(std::shared_ptr<DecodedTLVEle
 CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::WriteToDeviceState(std::shared_ptr<DecodedTLVElement> src,
                                                                AttributeState & attributeState)
 {
-
-    /**
-     * DecodedTLVElement and AttributeState have different representations of the underlying value.
-     * We need to convert the DecodedTLVElement to the standard type before writing to the device state.
-     */
     if (attributeState.ReadCurrent() == nullptr)
     {
         ReturnErrorOnFailure(attributeState.LazyInitialize(src->type, src->length, src->quality, src->content));
@@ -184,33 +179,6 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<Deco
                                                             std::shared_ptr<DecodedTLVElement> dst)
 {
     return Visitors::TLV::PushToContainer(std::move(element), dst);
-}
-
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::LoadClusterSnapshot(fs::path src, fuzz::ClusterState & state, bool fromJSON)
-{
-    return CHIP_NO_ERROR;
-}
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::LoadClusterSnapshot(fs::path src, chip::TLV::TLVWriter & writer, bool fromJSON)
-{
-    return CHIP_NO_ERROR;
-}
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::LoadClusterSnapshot(fs::path src, std::string & jsonStr, bool fromJSON)
-{
-    return CHIP_NO_ERROR;
-}
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::SaveClusterSnapshot(fs::path dst, fuzz::ClusterState & state, bool toJSON)
-{
-    return CHIP_NO_ERROR;
-}
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::SaveClusterSnapshot(fs::path dst, fuzz::ClusterState & state, std::string lastCommand,
-                                                                bool toJSON)
-{
-    return CHIP_NO_ERROR;
-}
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::SaveClusterSnapshot(fs::path dst, fuzz::ClusterState & state,
-                                                                std::vector<std::string> commandHistory, bool toJSON)
-{
-    return CHIP_NO_ERROR;
 }
 
 void fuzz::TLV::TLVDataPayloadHelper::PrettyPrint()
