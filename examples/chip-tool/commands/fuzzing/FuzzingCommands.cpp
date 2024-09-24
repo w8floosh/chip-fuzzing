@@ -180,15 +180,21 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     const char * kExampleCommandOff = "onoff off ";
 
     VerifyOrReturnError(CHIP_NO_ERROR == AcquireRemoteDataModel(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-    // auto fuzzer = fuzz::Fuzzer::GetInstance();
-    int status = 0;
+    auto fuzzer = fuzz::Fuzzer::GetInstance();
+    int status  = 0;
 
     for (int i = 0; i < 10; i++)
     {
         if (i % 2 == 0)
+        {
             ExecuteCommand(std::string(kExampleCommandOn).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
+            fuzzer->AppendToHistory(std::string(kExampleCommandOn).append(std::to_string(mDestinationId)).append(" 1").c_str());
+        }
         else
+        {
             ExecuteCommand(std::string(kExampleCommandOff).append(std::to_string(mDestinationId)).append(" 1").c_str(), &status);
+            fuzzer->AppendToHistory(std::string(kExampleCommandOff).append(std::to_string(mDestinationId)).append(" 1").c_str());
+        }
     }
     // for (const auto & endpoint : fuzzer->GetDeviceStateManager()->List(mDestinationId))
     // {

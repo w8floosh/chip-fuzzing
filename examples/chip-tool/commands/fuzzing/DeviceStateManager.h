@@ -167,8 +167,19 @@ public:
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
 
+    /**
+     * @brief Dumps the current device state to a YAML file.
+     */
+    CHIP_ERROR Dump(std::vector<std::string> commandHistory = std::vector<std::string>{});
+
+    /**
+     * @brief Loads a device state snapshot from a YAML file.
+     */
+    CHIP_ERROR Load(fs::path src);
+
 private:
     DeviceState mDeviceState;
+    fs::path mDumpDirectory;
 };
 
 } // namespace fuzzing
