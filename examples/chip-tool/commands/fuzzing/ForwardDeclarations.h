@@ -21,13 +21,13 @@ namespace fuzzing {
 
 using TLVType       = chip::TLV::TLVType;
 using TLVTag        = chip::TLV::TLVTagControl;
-using PrimitiveType = std::variant<bool, char *, float, double, std::nullopt_t, int8_t, int16_t, int32_t, int64_t, uint8_t,
-                                   uint16_t, uint32_t, uint64_t, std::string>;
+using PrimitiveType = std::variant<std::monostate, bool, char *, float, double, NullOptionalType, int8_t, int16_t, int32_t, int64_t,
+                                   uint8_t, uint16_t, uint32_t, uint64_t, std::string>;
 
 namespace fs = std::filesystem;
 class Fuzzer;
-class AttributeFactory;
-class AttributeWrapper;
+struct AttributeFactory;
+struct AttributeWrapper;
 class AttributeState;
 class DeviceStateManager;
 class Oracle;

@@ -26,7 +26,7 @@ inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte)
     }
     default: {
         // Bitwise AND with 0x3 constant only takes the 2 least significant bits of the control byte, reserved to size control
-        return 1 >> (controlByte & 0x3);
+        return 1 << (controlByte & 0x3);
     }
     }
 };
@@ -60,8 +60,8 @@ public:
 
     CHIP_ERROR Decode(std::shared_ptr<DecodedTLVElement> output);
     CHIP_ERROR Encode(std::shared_ptr<DecodedTLVElement> src);
-    CHIP_ERROR WriteToDeviceState(std::shared_ptr<DecodedTLVElement> src, AttributeState & attributeState);
-    CHIP_ERROR PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::shared_ptr<DecodedTLVElement> dst);
+    CHIP_ERROR WriteToDeviceState(std::shared_ptr<DecodedTLVElement> && src, AttributeState & attributeState);
+    CHIP_ERROR PushToContainer(std::shared_ptr<DecodedTLVElement> && element, std::shared_ptr<DecodedTLVElement> dst);
     CHIP_ERROR
     LoadClusterSnapshot(fs::path src, ClusterState & state, bool fromJSON = false);
     CHIP_ERROR LoadClusterSnapshot(fs::path src, chip::TLV::TLVWriter & writer, bool fromJSON = false);

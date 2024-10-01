@@ -1,4 +1,6 @@
 #include "FuzzingCommands.h"
+#include "Utils.h"
+#include "Visitors.h"
 #include <numeric>
 #include <string>
 
@@ -33,7 +35,7 @@ inline std::string GetReadAllClusterAttributesCommand(chip::NodeId node, chip::E
         .append(std::to_string(endpoint));
     return kCommand;
 }; // reads all attributes
-inline std::string GetReadAllClusterEventsCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster)
+inline std::string GetReadClusterEventCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster)
 {
     std::string kCommand("any read-event-by-id ");
     kCommand.append(std::to_string(cluster))
@@ -49,22 +51,24 @@ inline std::string GetSubscribeAllClusterAttributesCommand(chip::NodeId node, ch
     kCommand.append(std::to_string(cluster))
         .append(" 0xFFFFFFFF")
         .append(" 0")
-        .append(" -1")
-        .append(std::to_string(endpoint))
+        .append(" -1 ")
+        .append(std::to_string(node))
         .append(" ")
-        .append(std::to_string(cluster));
+        .append(std::to_string(endpoint));
     return kCommand;
 }; // subscribes to all attributes
-inline std::string GetSubscribeAllClusterEventCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster)
+inline std::string GetSubscribeEventCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster,
+                                            chip::EventId event)
 {
     std::string kCommand("any subscribe-event-by-id ");
     kCommand.append(std::to_string(cluster))
-        .append(" 0xFFFFFFFF")
-        .append(" 0")
-        .append(" -1")
-        .append(std::to_string(endpoint))
         .append(" ")
-        .append(std::to_string(cluster));
+        .append(std::to_string(event))
+        .append(" 0")
+        .append(" -1 ")
+        .append(std::to_string(node))
+        .append(" ")
+        .append(std::to_string(endpoint));
     return kCommand;
 }; // subscribes to all events
 } // namespace
@@ -89,9 +93,9 @@ CHIP_ERROR
 FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
 {
     // Access to the device state manager is required to add the new node and list the endpoints.
-    fuzz::DeviceStateManager deviceState = fuzz::Fuzzer::GetInstance()->mDeviceStateManager;
-    int status                           = 0;
-    deviceState.Add(id);
+    fuzz::DeviceStateManager * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+    int status                             = 0;
+    deviceState->Add(id);
 
     /**
      * Steps:
@@ -105,8 +109,8 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
 
     ExecuteCommand(retrieveEndpointsCommand.c_str(), &status);
     VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-    for (auto & endpoint : deviceState.List(id))
+    VerifyOrReturnError(deviceState->List(id) != nullptr, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    for (auto & endpoint : *deviceState->List(id))
     {
         std::string retrieveDeviceTypeCommand     = GetRetrieveDeviceTypeCommand(id, endpoint.first);
         std::string retrieveServerClustersCommand = GetRetrieveServerClustersCommand(id, endpoint.first);
@@ -115,30 +119,38 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
 
         ExecuteCommand(retrieveServerClustersCommand.c_str(), &status);
         VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+        VerifyOrReturnError(deviceState->List(id, endpoint.first) != nullptr, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-        for (auto & cluster : deviceState.List(id, endpoint.first))
+        for (auto & cluster : *deviceState->List(id, endpoint.first))
         {
             std::string readAllClusterAttributesCommand = GetReadAllClusterAttributesCommand(id, endpoint.first, cluster.first);
-            // std::string readAllClusterEventsCommand     = GetReadAllClusterEventsCommand(id, endpoint.first, cluster.first);
+            std::string subscribeAllClusterAttributesCommand =
+                GetSubscribeAllClusterAttributesCommand(id, endpoint.first, cluster.first);
 
             ExecuteCommand(readAllClusterAttributesCommand.c_str(), &status);
             VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-            // ExecuteCommand(readAllClusterEventsCommand.c_str(), &status);
-            // VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-            std::string subscribeAllClusterAttributesCommand =
-                GetSubscribeAllClusterAttributesCommand(id, endpoint.first, cluster.first);
-            // std::string subscribeAllClusterEventsCommand = GetSubscribeAllClusterEventCommand(id, endpoint.first, cluster.first);
-
             ExecuteCommand(subscribeAllClusterAttributesCommand.c_str(), &status);
             VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-            // ExecuteCommand(subscribeAllClusterEventsCommand.c_str(), &status);
-            // VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            VerifyOrReturnError(deviceState->List(id, endpoint.first, cluster.first) != nullptr,
+                                CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+
+            auto eventList = deviceState->ReadAttribute(id, endpoint.first, cluster.first,
+                                                        chip::app::Clusters::Globals::Attributes::EventList::Id);
+            if (!std::holds_alternative<chip::fuzzing::ContainerType>(eventList))
+                continue;
+
+            for (auto & event : std::get<chip::fuzzing::ContainerType>(eventList))
+            {
+                std::string subscribeClusterEventCommand = GetSubscribeEventCommand(
+                    id, endpoint.first, cluster.first, chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(event));
+
+                ExecuteCommand(subscribeClusterEventCommand.c_str(), &status);
+                VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            }
         }
     }
-
+    deviceState->Dump();
     return CHIP_NO_ERROR;
 }
 
@@ -158,11 +170,11 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
         mStatefulFuzzingEnabled = true;
         mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument.Value()));
         VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_FILESYSTEM_ERROR);
-        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, mOutputDirectory.Value());
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, fs::path("statedumps"), mOutputDirectory.Value());
     }
     else
     {
-        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc);
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, fs::path("statedumps"));
     }
 
     kGenerationFunc = nullptr;
@@ -178,7 +190,6 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
 
     const char * kExampleCommandOn  = "onoff on ";
     const char * kExampleCommandOff = "onoff off ";
-
     VerifyOrReturnError(CHIP_NO_ERROR == AcquireRemoteDataModel(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
     auto fuzzer = fuzz::Fuzzer::GetInstance();
     int status  = 0;
@@ -196,6 +207,8 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
             fuzzer->AppendToHistory(std::string(kExampleCommandOff).append(std::to_string(mDestinationId)).append(" 1").c_str());
         }
     }
+
+    fuzzer->GetDeviceStateManager()->Dump(fuzzer->mCommandHistory);
     // for (const auto & endpoint : fuzzer->GetDeviceStateManager()->List(mDestinationId))
     // {
     //     for (const auto & cluster : endpoint.second.clusters)
