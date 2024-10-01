@@ -16,7 +16,7 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::DecodePrimitive(TLVType dstType, uin
         break;
     }
     case TLVType::kTLVType_Null: {
-        output->content = std::nullopt;
+        output->content = NullOptional;
         break;
     }
     case TLVType::kTLVType_SignedInteger: {
@@ -161,21 +161,27 @@ CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::Encode(std::shared_ptr<DecodedTLVEle
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::WriteToDeviceState(std::shared_ptr<DecodedTLVElement> src,
+CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::WriteToDeviceState(std::shared_ptr<DecodedTLVElement> && src,
                                                                AttributeState & attributeState)
 {
-    if (attributeState.ReadCurrent() == nullptr)
+    // src is ALWAYS a structure element. The first element of the structure is the actual value
+    VerifyOrReturnError(std::holds_alternative<ContainerType>(src->content), CHIP_ERROR_INTERNAL);
+    auto container = std::move(src);
+    auto element   = std::get<ContainerType>(container->content).at(0);
+    VerifyOrReturnError(element != nullptr, CHIP_ERROR_INTERNAL);
+    if (std::holds_alternative<std::monostate>(attributeState.ReadCurrent()))
     {
-        ReturnErrorOnFailure(attributeState.LazyInitialize(src->type, src->length, src->quality, src->content));
+        ReturnErrorOnFailure(
+            attributeState.LazyInitialize(container->type, container->length, container->quality, std::move(element->content)));
     }
     else
     {
-        ReturnErrorOnFailure(attributeState.Write(src->content));
+        ReturnErrorOnFailure(attributeState.Write(std::move(element->content)));
     }
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<DecodedTLVElement> element,
+CHIP_ERROR fuzz::TLV::TLVDataPayloadHelper::PushToContainer(std::shared_ptr<DecodedTLVElement> && element,
                                                             std::shared_ptr<DecodedTLVElement> dst)
 {
     return Visitors::TLV::PushToContainer(std::move(element), dst);

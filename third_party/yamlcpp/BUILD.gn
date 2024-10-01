@@ -1,0 +1,89 @@
+# Copyright (c) 2022 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/build.gni")
+import("//build_overrides/chip.gni")
+
+config("yamlcpp_config") {
+  include_dirs = [ "repo/include" ]
+}
+
+config("yamlcpp_config_disable_warnings") {
+  cflags = [
+    "-fexceptions",
+    "-Wno-error",
+  ]
+}
+
+source_set("yamlcpp") {
+  sources = [
+    "repo/include/yaml-cpp/yaml.h",
+    "repo/src/binary.cpp",
+    "repo/src/collectionstack.h",
+    "repo/src/convert.cpp",
+    "repo/src/depthguard.cpp",
+    "repo/src/directives.cpp",
+    "repo/src/directives.h",
+    "repo/src/emit.cpp",
+    "repo/src/emitfromevents.cpp",
+    "repo/src/emitter.cpp",
+    "repo/src/emitterstate.cpp",
+    "repo/src/emitterstate.h",
+    "repo/src/emitterutils.cpp",
+    "repo/src/emitterutils.h",
+    "repo/src/exceptions.cpp",
+    "repo/src/exp.cpp",
+    "repo/src/exp.h",
+    "repo/src/indentation.h",
+    "repo/src/memory.cpp",
+    "repo/src/node.cpp",
+    "repo/src/node_data.cpp",
+    "repo/src/nodebuilder.cpp",
+    "repo/src/nodebuilder.h",
+    "repo/src/nodeevents.cpp",
+    "repo/src/nodeevents.h",
+    "repo/src/null.cpp",
+    "repo/src/ostream_wrapper.cpp",
+    "repo/src/parse.cpp",
+    "repo/src/parser.cpp",
+    "repo/src/ptr_vector.h",
+    "repo/src/regex_yaml.cpp",
+    "repo/src/regex_yaml.h",
+    "repo/src/regeximpl.h",
+    "repo/src/scanner.cpp",
+    "repo/src/scanner.h",
+    "repo/src/scanscalar.cpp",
+    "repo/src/scanscalar.h",
+    "repo/src/scantag.cpp",
+    "repo/src/scantag.h",
+    "repo/src/scantoken.cpp",
+    "repo/src/setting.h",
+    "repo/src/simplekey.cpp",
+    "repo/src/singledocparser.cpp",
+    "repo/src/singledocparser.h",
+    "repo/src/stream.cpp",
+    "repo/src/stream.h",
+    "repo/src/streamcharsource.h",
+    "repo/src/stringsource.h",
+    "repo/src/tag.cpp",
+    "repo/src/tag.h",
+    "repo/src/token.h",
+  ]
+
+  public_configs = [ ":yamlcpp_config" ]
+
+  configs += [ ":yamlcpp_config_disable_warnings" ]
+
+  include_dirs = [ "repo/src" ]
+}

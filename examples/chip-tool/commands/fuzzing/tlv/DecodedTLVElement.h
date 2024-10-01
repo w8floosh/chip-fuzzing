@@ -91,7 +91,7 @@ private:
         {
             std::cout << std::to_string(value) << std::endl;
         }
-        else if constexpr (std::is_same_v<T, std::nullopt_t>)
+        else if constexpr (std::is_same_v<T, NullOptionalType>)
         {
             std::cout << "null" << std::endl;
         }
@@ -122,9 +122,9 @@ private:
     {
         VerifyOrDie(element != nullptr);
         Indent(indent);
-        std::cout << "[Type: 0x" << std::hex << static_cast<int16_t>(element->type)
-                  << ", Size or length: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
-                  << static_cast<int16_t>(element->tag) << " ("
+        std::cout << "[Type: 0x" << std::hex << static_cast<int16_t>(element->type) << std::dec
+                  << ", Byte size: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
+                  << static_cast<int16_t>(element->tag) << " (" << std::dec
                   << (element->quality == fuzz::AttributeQualityEnum::kMandatory ? "mandatory" : "optional");
         Visitors::TLV::FinalizePrintDecodedElementMetadata(this, element, indent);
     }

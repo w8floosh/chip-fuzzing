@@ -1,6 +1,8 @@
 #include "Visitors.h"
 #include "Fuzzing.h"
 #include "tlv/DecodedTLVElement.h"
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 
 namespace Visitors = chip::fuzzing::Visitors;
 
@@ -73,7 +75,7 @@ void Visitors::TLV::FinalizePrintDecodedElementMetadata(DecodedTLVElementPrettyP
             using arg_t = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<arg_t, ContainerType>)
             {
-                std::cout << "), size: " << arg.size() << "] = {" << std::endl;
+                std::cout << "), size: " << std::dec << arg.size() << "] = {" << std::endl;
             }
             else
             {
@@ -97,15 +99,43 @@ void Visitors::TLV::ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVE
                 auto container = std::get<ContainerType>(arg[0]->content);
                 for (const auto & element : container)
                 {
-                    auto deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+                    auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
                     if constexpr (std::is_same_v<T, EndpointId>)
                     {
                         deviceState->Add(node, ConvertToIdType<EndpointId>(element));
                     }
-                    else
+                    else if constexpr (std::is_same_v<T, uint32_t>)
                     {
-                        // This case also applies to the DeviceTypeId: both types are uint32_t
-                        deviceState->Add(node, path.mEndpointId, ConvertToIdType<ClusterId>(element));
+                        /**
+                         * This case applies to both DeviceTypeId and ClusterId: both types are uint32_t.
+                         * "element" may be an array of DeviceTypeStruct typed objects:
+                         * [
+                         *   {
+                         *     deviceType: int,
+                         *     revision: int
+                         *   }
+                         * ]
+                         * We only really care about the first array element at the moment
+                         */
+
+                        // Processing testing clusters is not useful and may lead to errors.
+
+                        if (path.mAttributeId == chip::app::Clusters::Descriptor::Attributes::DeviceTypeList::Id)
+                        {
+                            VerifyOrDie(std::holds_alternative<ContainerType>(element->content));
+                            auto deviceTypeStruct   = std::get<ContainerType>(element->content);
+                            DeviceTypeId deviceType = ConvertToIdType<DeviceTypeId>(deviceTypeStruct[0]);
+                            uint16_t revision       = static_cast<uint16_t>(std::get<uint8_t>(deviceTypeStruct[1]->content));
+                            deviceState->Add(node, path.mEndpointId, DeviceTypeStruct{ deviceType, revision });
+                        }
+                        else
+                        {
+                            ClusterId cluster = ConvertToIdType<ClusterId>(element);
+                            // TODO: Get cluster revision dynamically
+                            if (IsManufacturerSpecificTestingCluster(cluster) || cluster == chip::app::Clusters::Descriptor::Id)
+                                continue;
+                            deviceState->Add(node, path.mEndpointId, cluster);
+                        }
                     }
                 }
             }
@@ -137,81 +167,89 @@ Visitors::TLV::PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::
         dst->content);
 }
 
-fuzz::AnyType * Visitors::AttributeWrapperRead(AttributeWrapper * attribute)
+const fuzz::AnyType & Visitors::AttributeWrapperRead(AttributeWrapper * attribute)
 {
     return std::visit(
-        [&](auto & v) -> AnyType * {
+        [&](auto && v) -> const AnyType & {
             using T = std::decay_t<decltype(v)>; // T is the type of the variant
-            if constexpr (std::is_same_v<T, AnyType>)
+            if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
             {
-                return &v;
+                VerifyOrReturnValue(v.HasValue(), kInvalidValue);
+                return v.Value();
             }
-            else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
-            {
-                VerifyOrReturnValue(v.HasValue(), nullptr);
-                return &v.Value();
-            }
+            else if constexpr (std::is_same_v<T, AnyType>)
+                return v;
             else
-                return nullptr;
+                return kInvalidValue;
         },
         attribute->value);
 }
 
 CHIP_ERROR Visitors::AttributeWrapperWriteOrFail(AttributeWrapper * attribute, size_t & typeIndexAfterWrite,
-                                                 size_t underlyingTypeIndexAfterWrite, const AnyType & aValue)
+                                                 size_t & underlyingTypeIndexAfterWrite, AnyType && aValue)
 {
-    return std::visit(
-        [&](const auto & v) {
-            using T = std::decay_t<decltype(attribute->value)>; // T is the type of the variant of the value holder (std::monostate,
-                                                                // AnyType or chip::Optional<AnyType>)
-            using VT = std::decay_t<decltype(v)>; // VT is the type of the variant of the argument (one of the PrimitiveType
-                                                  // variants or ContainerType)
+
+    ReturnErrorOnFailure(std::visit(
+        [&](auto & v) {
+            // T is the type of the variant of the value holder (std::monostate, AnyType or chip::Optional<AnyType>)
+            using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, AnyType>)
             {
-                attribute->value = std::get<VT>(v);
+                v = std::move(aValue);
             }
             else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
             {
-                attribute->value = chip::Optional<VT>::Value(std::get<VT>(v));
+                v.SetValue(std::move(aValue));
             }
             else
             {
                 return CHIP_ERROR_INTERNAL;
             }
-            typeIndexAfterWrite           = attribute->value.index();
-            underlyingTypeIndexAfterWrite = attribute->Read()->index();
             return CHIP_NO_ERROR;
         },
-        aValue);
+        attribute->value));
+    typeIndexAfterWrite           = attribute->value.index();
+    underlyingTypeIndexAfterWrite = attribute->Read().index();
+    return CHIP_NO_ERROR;
 }
 
-std::string Visitors::AttributeValueAsString(const AnyType * attr)
+std::string Visitors::AttributeValueAsString(const AnyType & attr)
 {
-    return "";
-    // VerifyOrReturnValue(attr != nullptr, std::string("null"));
-    // return std::visit(
-    //     [&](auto & v) {
-    //         using T = std::decay_t<decltype(v)>;
-    //         if constexpr (std::is_same_v<T, bool>)
-    //         {
-    //             return v ? "true" : "false";
-    //         }
-    //         else if constexpr (std::is_same_v<T, std::string>)
-    //         {
-    //             return v;
-    //         }
-    //         else if constexpr (std::is_same_v<T, chip::ByteSpan>)
-    //         {
-    //             return std::string(v.data(), v.size());
-    //         }
-    //         else if constexpr (std::is_same_v<T, chip::Optional<AnyType>>)
-    //     },
-    //     *attr);
+    VerifyOrDie(!std::holds_alternative<ContainerType>(attr));
+    return std::visit(
+        [&](auto & v) -> std::string {
+            using T = std::decay_t<decltype(v)>;
+            if constexpr (std::is_same_v<T, bool>)
+            {
+                return v ? std::string("true") : std::string("false");
+            }
+            else if constexpr (std::is_same_v<T, char *>)
+            {
+                return std::string(v);
+            }
+            else if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, uint16_t> || std::is_same_v<T, uint32_t> ||
+                               std::is_same_v<T, uint64_t> || std::is_same_v<T, int8_t> || std::is_same_v<T, int16_t> ||
+                               std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t> || std::is_same_v<T, float> ||
+                               std::is_same_v<T, double>)
+            {
+                return std::to_string(v);
+            }
+            else if constexpr (std::is_same_v<T, std::string>)
+            {
+                return v;
+            }
+            else if constexpr (std::is_same_v<T, NullOptionalType>)
+            {
+                return std::string("null");
+            }
+            else
+                return std::string("unknown");
+        },
+        attr);
 }
 
-std::string Visitors::AttributeTypeAsString(const AnyType * attr)
+std::string Visitors::AttributeTypeAsString(const AnyType & attr)
 {
-    VerifyOrReturnValue(attr != nullptr, std::string("nullable"));
     return std::visit(
         [&](auto & v) -> std::string {
             using T = std::decay_t<decltype(v)>;
@@ -271,7 +309,7 @@ std::string Visitors::AttributeTypeAsString(const AnyType * attr)
             {
                 return std::string("container");
             }
-            else if constexpr (std::is_same_v<T, std::nullopt_t>)
+            else if constexpr (std::is_same_v<T, NullOptionalType>)
             {
                 // TODO: Find a way to retrieve null values underlying type
                 return std::string("nullable");
@@ -279,5 +317,5 @@ std::string Visitors::AttributeTypeAsString(const AnyType * attr)
             else
                 return std::string("unknown");
         },
-        *attr);
+        attr);
 }

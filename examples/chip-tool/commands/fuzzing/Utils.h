@@ -23,12 +23,26 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
 using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
 using AnyType       = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 
+inline AnyType kInvalidValue = std::monostate();
+
 inline void Indent(size_t indent)
 {
     for (size_t i = 0; i < indent; i++)
     {
         std::cout << " ";
     }
+}
+
+inline bool IsManufacturerSpecificTestingCluster(ClusterId cluster)
+{
+    /**
+     * Standard clusters are in range 0x0000_0000 - 0x0007_FFFF.
+     * Manufacturer-specific clusters are in range 0x0001_XXXX - 0xFFF4_YYYY, where XXXX >= FC00 and YYYY <= FFFE.
+     * Valid mnufacturer-specific clusters IDs ranging from 0xFFF1_0000 to 0xFFF4_FFFE are reserved to testing.
+     */
+    uint32_t manufacturerCode        = cluster & 0xFFFF0000;
+    uint32_t manufacturerProductCode = cluster & 0x0000FFFE;
+    return manufacturerCode >= 0xFFF10000 && manufacturerCode <= 0xFFF4FFFE && manufacturerProductCode >= 0xFC00;
 }
 
 const std::vector<std::pair<TLVType, uint8_t>> supportedTypes{ { TLVType::kTLVType_Array, 0 },

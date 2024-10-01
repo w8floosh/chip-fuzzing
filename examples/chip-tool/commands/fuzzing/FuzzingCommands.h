@@ -19,7 +19,7 @@ public:
     /////////// CHIPCommand Interface /////////
     chip::System::Clock::Timeout GetWaitDuration() const override { return chip::System::Clock::Seconds16(0); }
     void ExecuteCommand(const char * command, int * status);
-    virtual CHIP_ERROR RunCommand() = 0;
+    virtual CHIP_ERROR RunCommand() override = 0;
 
 private:
     Commands * mHandler = nullptr;
@@ -55,7 +55,7 @@ private:
     char * mGenerationFuncArgument;
     char * mSeedDirectoryArgument;
     chip::Optional<char *> mOutputDirectoryArgument = chip::NullOptional;
-    chip::Optional<uint32_t> mIterations            = chip::Optional<uint32_t>::Value(1000);
+    chip::Optional<uint32_t> mIterations            = chip::Optional<uint32_t>::Value(1000U);
 
     bool mStatefulFuzzingEnabled = false;
     fs::path mSeedDirectory;

@@ -39,11 +39,8 @@ public:
         {
             using Fuzzer    = chip::fuzzing::Fuzzer;
             Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
-                fuzzer->AnalyzeReportData(data, path, status);
-            }
+            // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
+            fuzzer->AnalyzeReportData(data, path, status);
         }
 
         CHIP_ERROR error = status.ToChipError();
@@ -52,7 +49,16 @@ public:
             LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(path, status));
 
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
-            mError = error;
+            if (IsFuzzing())
+            {
+                using Fuzzer    = chip::fuzzing::Fuzzer;
+                Fuzzer * fuzzer = Fuzzer::GetInstance();
+                fuzzer->AnalyzeReportError(path, status);
+            }
+            else
+            {
+                mError = error;
+            }
             return;
         }
 
@@ -97,6 +103,7 @@ public:
 
                 ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
                 mError = error;
+
                 return;
             }
         }

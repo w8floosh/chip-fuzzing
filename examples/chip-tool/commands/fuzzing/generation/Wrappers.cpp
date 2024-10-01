@@ -25,14 +25,17 @@ const char * GenerateCommandSeedOnly(fs::path seedsDir)
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(0, (int) files.size() - 1);
-    std::string randomFile = files[dis(gen)];
+
+    std::string randomFile = files[static_cast<size_t>(dis(gen))];
 
     // Read the first line from the random file
     std::ifstream inputFile(randomFile);
     std::string firstLine;
     if (std::getline(inputFile, firstLine))
     {
-        return firstLine.c_str();
+        char * command = new char[firstLine.length() + 1];
+        strncpy(command, firstLine.c_str(), firstLine.length() + 1);
+        return command;
     }
     // Return nullptr if the file is empty or cannot be read
     return nullptr;

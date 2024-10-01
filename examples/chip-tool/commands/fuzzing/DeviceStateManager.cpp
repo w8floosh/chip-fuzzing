@@ -60,83 +60,77 @@ bool WriteValue(Map & map, const K & id, const Path &... ids, const V & aValue)
 
 CHIP_ERROR LoadValue(const YAML::detail::iterator_value & attribute, fuzz::AnyType & value)
 {
-    try
+    if (attribute["type"].as<std::string>() == "bool")
     {
-
-        if (attribute["type"].as<std::string>() == "bool")
+        value = attribute["value"].as<bool>();
+    }
+    else if (attribute["type"].as<std::string>() == "byte string")
+    {
+        char * byteString = new char[attribute["value"].as<std::string>().size() + 1];
+        strncpy(byteString, attribute["value"].as<std::string>().c_str(), attribute["value"].as<std::string>().size() + 1);
+        value = byteString;
+    }
+    else if (attribute["type"].as<std::string>() == "unsigned integer 1")
+    {
+        value = attribute["value"].as<uint8_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "unsigned integer 2")
+    {
+        value = attribute["value"].as<uint16_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "unsigned integer 4")
+    {
+        value = attribute["value"].as<uint32_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "unsigned integer 8")
+    {
+        value = attribute["value"].as<uint64_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "signed integer 1")
+    {
+        value = attribute["value"].as<int8_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "signed integer 2")
+    {
+        value = attribute["value"].as<int16_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "signed integer 4")
+    {
+        value = attribute["value"].as<int32_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "signed integer 8")
+    {
+        value = attribute["value"].as<int64_t>();
+    }
+    else if (attribute["type"].as<std::string>() == "float")
+    {
+        value = attribute["value"].as<float>();
+    }
+    else if (attribute["type"].as<std::string>() == "double")
+    {
+        value = attribute["value"].as<double>();
+    }
+    else if (attribute["type"].as<std::string>() == "utf8 string")
+    {
+        value = attribute["value"].as<std::string>();
+    }
+    else if (attribute["type"].as<std::string>() == "container")
+    {
+        // TODO: Manage conversion
+        fuzz::ContainerType container{};
+        for (const auto & element : attribute["value"])
         {
-            value = attribute["value"].as<bool>();
+            auto nestedElement = std::make_shared<fuzz::TLV::DecodedTLVElement>();
+            ReturnErrorOnFailure(LoadValue(element, nestedElement->content));
+            container.push_back(std::move(nestedElement));
         }
-        else if (attribute["type"].as<std::string>() == "byte string")
-        {
-            char * byteString = new char[attribute["value"].as<std::string>().size() + 1];
-            strncpy(byteString, attribute["value"].as<std::string>().c_str(), attribute["value"].as<std::string>().size() + 1);
-            value = byteString;
-        }
-        else if (attribute["type"].as<std::string>() == "unsigned integer 1")
-        {
-            value = attribute["value"].as<uint8_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "unsigned integer 2")
-        {
-            value = attribute["value"].as<uint16_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "unsigned integer 4")
-        {
-            value = attribute["value"].as<uint32_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "unsigned integer 8")
-        {
-            value = attribute["value"].as<uint64_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "signed integer 1")
-        {
-            value = attribute["value"].as<int8_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "signed integer 2")
-        {
-            value = attribute["value"].as<int16_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "signed integer 4")
-        {
-            value = attribute["value"].as<int32_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "signed integer 8")
-        {
-            value = attribute["value"].as<int64_t>();
-        }
-        else if (attribute["type"].as<std::string>() == "float")
-        {
-            value = attribute["value"].as<float>();
-        }
-        else if (attribute["type"].as<std::string>() == "double")
-        {
-            value = attribute["value"].as<double>();
-        }
-        else if (attribute["type"].as<std::string>() == "utf8 string")
-        {
-            value = attribute["value"].as<std::string>();
-        }
-        else if (attribute["type"].as<std::string>() == "container")
-        {
-            // TODO: Manage conversion
-            fuzz::ContainerType container{};
-            for (const auto & element : attribute["value"])
-            {
-                auto nestedElement = std::make_shared<fuzz::TLV::DecodedTLVElement>();
-                ReturnErrorOnFailure(LoadValue(element, nestedElement->content));
-                container.push_back(std::move(nestedElement));
-            }
-            value = container;
-        }
-        else
-        {
-            return CHIP_ERROR_INTERNAL;
-        }
-    } catch (const YAML::InvalidNode & e)
+        value = container;
+    }
+    else
     {
         return CHIP_ERROR_INTERNAL;
     }
+
     return CHIP_NO_ERROR;
 }
 
@@ -146,7 +140,7 @@ CHIP_ERROR DumpContainer(const fuzz::ContainerType & container, YAML::Emitter & 
     emitter << YAML::Key << "value" << YAML::BeginSeq;
     for (const auto & element : container)
     {
-        std::string attributeType = fuzz::Visitors::AttributeTypeAsString(&element->content);
+        std::string attributeType = fuzz::Visitors::AttributeTypeAsString(element->content);
         emitter << YAML::BeginMap;
         emitter << YAML::Key << "type" << YAML::Value << attributeType;
         if (attributeType == "container")
@@ -155,7 +149,7 @@ CHIP_ERROR DumpContainer(const fuzz::ContainerType & container, YAML::Emitter & 
             ReturnErrorOnFailure(DumpContainer(std::get<fuzz::ContainerType>(element->content), emitter));
         }
         else
-            emitter << YAML::Key << "value" << YAML::Value << fuzz::Visitors::AttributeValueAsString(&element->content);
+            emitter << YAML::Key << "value" << YAML::Value << fuzz::Visitors::AttributeValueAsString(element->content);
 
         emitter << YAML::EndMap;
     }
@@ -182,12 +176,12 @@ fuzz::ClusterState * fuzz::DeviceState::operator()(NodeId node, EndpointId endpo
     return ReadValueOrNull((*this)(node, endpoint)->clusters, cluster);
 }
 
-const auto fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                                                   bool current)
+const fuzz::AnyType & fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster,
+                                                              AttributeId attribute, bool current)
 {
-    VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
+    VerifyOrReturnValue(mDeviceState(node, endpoint, cluster) != nullptr, kInvalidValue);
     AttributeState * attributeState = ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute);
-    VerifyOrDie(attributeState != nullptr);
+    VerifyOrReturnValue(attributeState != nullptr, kInvalidValue);
     return current ? attributeState->ReadCurrent() : attributeState->ReadLast();
 }
 fuzz::AttributeState & fuzz::DeviceStateManager::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
@@ -197,11 +191,11 @@ fuzz::AttributeState & fuzz::DeviceStateManager::GetAttributeState(NodeId node, 
 }
 
 void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
-                                              const AnyType & aValue)
+                                              AnyType && aValue)
 {
     VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
     AttributeState & attributeState = ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
-    attributeState.Write(aValue);
+    attributeState.Write(std::move(aValue));
 }
 
 // TODO: Consider variadic refactoring
@@ -209,95 +203,125 @@ void fuzz::DeviceStateManager::Add(NodeId node)
 {
     VerifyOrReturn(mDeviceState(node) == nullptr);
     NodeState state{};
-    mDeviceState.nodes.emplace(node, state);
+    auto pair = mDeviceState.nodes.emplace(node, state);
+    VerifyOrDieWithMsg(pair.second, chipFuzzer, "pacchitosoru");
 }
 
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
 {
     VerifyOrReturn(endpoint != kInvalidEndpointId);
-    VerifyOrReturn(mDeviceState(node) != nullptr && mDeviceState(node, endpoint) == nullptr);
+    VerifyOrReturn((mDeviceState(node) != nullptr) && (mDeviceState(node, endpoint) == nullptr));
     EndpointState state{};
     state.endpointId = endpoint;
-    mDeviceState(node)->endpoints.emplace(endpoint, state);
+    VerifyOrDie(mDeviceState(node)->endpoints.emplace(endpoint, state).second);
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType)
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeStruct deviceType)
 {
-    VerifyOrReturn(endpoint != kInvalidEndpointId && deviceType != kInvalidClusterId);
+    VerifyOrReturn((endpoint != kInvalidEndpointId) && (deviceType.id != kInvalidClusterId));
     VerifyOrReturn(mDeviceState(node) != nullptr);
     if (mDeviceState(node, endpoint) != nullptr)
     {
-        mDeviceState(node, endpoint)->deviceTypeId = deviceType;
+        mDeviceState(node, endpoint)->deviceTypes.push_back(deviceType);
     }
     else
     {
         EndpointState state{};
-        state.endpointId   = endpoint;
-        state.deviceTypeId = deviceType;
-        mDeviceState(node)->endpoints.emplace(endpoint, state);
+        state.endpointId  = endpoint;
+        state.deviceTypes = std::vector<DeviceTypeStruct>();
+        VerifyOrDie(mDeviceState(node)->endpoints.emplace(endpoint, state).second);
     }
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision)
+void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, uint16_t revision)
 {
-    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId);
-    VerifyOrReturn(mDeviceState(node, endpoint) != nullptr && mDeviceState(node, endpoint, cluster) == nullptr);
+    VerifyOrReturn((endpoint != kInvalidEndpointId) && (cluster != kInvalidClusterId));
+    VerifyOrReturn((mDeviceState(node, endpoint) != nullptr) && (mDeviceState(node, endpoint, cluster) == nullptr));
     ClusterState state{};
     state.clusterId       = cluster;
     state.clusterRevision = revision;
-    mDeviceState(node, endpoint)->clusters.emplace(cluster, state);
+    VerifyOrDie(mDeviceState(node, endpoint)->clusters.emplace(cluster, state).second);
 }
 
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
-    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && attribute != kInvalidAttributeId);
-    VerifyOrReturn(mDeviceState(node, endpoint, cluster) != nullptr &&
-                   ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute) == nullptr);
+    VerifyOrReturn((endpoint != kInvalidEndpointId) && (cluster != kInvalidClusterId) && (attribute != kInvalidAttributeId));
+    VerifyOrReturn((mDeviceState(node, endpoint, cluster) != nullptr) &&
+                   (ReadValueOrNull(mDeviceState(node, endpoint, cluster)->attributes, attribute) == nullptr));
 
     AttributeState state{};
-    mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state);
+    VerifyOrDie(mDeviceState(node, endpoint, cluster)->attributes.emplace(attribute, state).second);
 }
 
+/**
+ * Creates a YAML file and dumps the device state in it.
+ * Dumping the device state is a costly operation, as the function traverses and copies the whole device state inside a std::map to
+ * dump the keys in ascending order.
+ */
 CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistory)
 {
+    // TODO: Add dumping for events and events history
     auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
     YAML::Emitter emitter;
 
     emitter << YAML::BeginMap;
-    emitter << YAML::Key << "timestamp" << YAML::Value << std::to_string(now_ms.count());
+    emitter << YAML::Key << "timestamp" << YAML::Value << std::to_string(now_ms);
     emitter << YAML::Key << "nodes" << YAML::Value << YAML::BeginMap;
-    for (auto & [nodeId, nodeState] : List())
+    const auto nodes = *List();
+    for (auto & [nodeId, nodeState] : std::map<NodeId, NodeState>(nodes.begin(), nodes.end()))
     {
         emitter << YAML::Key << nodeId << YAML::Value << YAML::BeginMap;
         emitter << YAML::Key << "endpoints" << YAML::Value << YAML::BeginMap;
-
-        for (auto & [endpointId, endpointState] : List(nodeId))
+        const auto endpoints = *List(nodeId);
+        for (auto & [endpointId, endpointState] : std::map<EndpointId, EndpointState>(endpoints.begin(), endpoints.end()))
         {
             emitter << YAML::Key << endpointId << YAML::Value << YAML::BeginMap;
-            emitter << YAML::Key << "deviceType" << YAML::Value << endpointState.deviceTypeId;
-            emitter << YAML::Key << "clusters" << YAML::Value << YAML::BeginMap;
+            emitter << YAML::Key << "deviceTypes" << YAML::Value << YAML::BeginSeq;
 
-            for (auto & [clusterId, clusterState] : List(nodeId, endpointId))
+            std::set<DeviceTypeId> deviceTypeIds;
+            for (auto & deviceType : endpointState.deviceTypes)
+            {
+                if (deviceTypeIds.find(deviceType.id) == deviceTypeIds.end())
+                {
+                    deviceTypeIds.emplace(deviceType.id);
+                    emitter << YAML::BeginMap << YAML::Key << "id" << YAML::Value << deviceType.id;
+                    emitter << YAML::Key << "revision" << YAML::Value << deviceType.revision << YAML::EndMap;
+                }
+            }
+            emitter << YAML::EndSeq;
+
+            emitter << YAML::Key << "clusters" << YAML::Value << YAML::BeginMap;
+            const auto clusters = *List(nodeId, endpointId);
+
+            for (auto & [clusterId, clusterState] : std::map<ClusterId, ClusterState>(clusters.begin(), clusters.end()))
             {
                 emitter << YAML::Key << clusterId << YAML::Value << YAML::BeginMap;
                 emitter << YAML::Key << "revision" << YAML::Value << clusterState.clusterRevision;
                 emitter << YAML::Key << "attributes" << YAML::Value << YAML::BeginMap;
-
-                for (auto & [attributeId, attributeState] : List(nodeId, endpointId, clusterId))
+                const auto attributes = *List(nodeId, endpointId, clusterId);
+                for (auto & [attributeId, attributeState] :
+                     std::map<AttributeId, AttributeState>(attributes.begin(), attributes.end()))
                 {
-                    const AnyType * attributeValue = attributeState.ReadCurrent();
+                    if (!attributeState.IsReadable())
+                    {
+                        emitter << YAML::Key << attributeId << YAML::Value << "unreadable";
+                        continue;
+                    }
+                    const AnyType & attributeValue = attributeState.ReadCurrent();
                     emitter << YAML::Key << attributeId << YAML::Value << YAML::BeginMap;
                     std::string attributeType = Visitors::AttributeTypeAsString(attributeValue);
                     emitter << YAML::Key << "type" << YAML::Value << attributeType;
                     if (attributeType == "container")
                     {
-                        VerifyOrReturnError(std::holds_alternative<ContainerType>(*attributeValue), CHIP_ERROR_INTERNAL);
-                        ReturnErrorOnFailure(DumpContainer(std::get<ContainerType>(*attributeValue), emitter));
+                        VerifyOrReturnError(std::holds_alternative<ContainerType>(attributeValue), CHIP_ERROR_INTERNAL);
+                        ReturnErrorOnFailure(DumpContainer(std::get<ContainerType>(attributeValue), emitter));
                     }
                     else
+                    {
                         emitter << YAML::Key << "value" << YAML::Value << Visitors::AttributeValueAsString(attributeValue);
+                    }
                     // TODO: We should manage nullable/optional attributes (we may add a nullable: true/false or optional:
                     // TODO: true/false field)
                     emitter << YAML::EndMap;
@@ -329,7 +353,7 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistor
 
     emitter << YAML::EndMap;
 
-    std::string fileName(std::to_string(now_ms.count()));
+    std::string fileName(std::to_string(now_ms));
     std::ofstream file(mDumpDirectory / fileName);
     file << emitter.c_str();
     file.close();
@@ -354,14 +378,14 @@ CHIP_ERROR fuzz::DeviceStateManager::Load(fs::path src)
             {
                 VerifyOrReturnError(cluster.IsMap() && cluster["attributes"] && cluster["revision"], CHIP_ERROR_INVALID_ARGUMENT);
                 Add(node.first.as<NodeId>(), endpoint.first.as<EndpointId>(), cluster.first.as<ClusterId>(),
-                    cluster["revision"].as<int>());
+                    cluster["revision"].as<uint16_t>());
                 for (const auto & attribute : cluster["attributes"])
                 {
                     VerifyOrReturnError(attribute.IsMap() && attribute["type"] && attribute["value"], CHIP_ERROR_INVALID_ARGUMENT);
                     AnyType value;
                     ReturnErrorOnFailure(LoadValue(attribute, value));
                     WriteAttribute(node.first.as<NodeId>(), endpoint.first.as<EndpointId>(), cluster.first.as<ClusterId>(),
-                                   attribute.first.as<AttributeId>(), value);
+                                   attribute.first.as<AttributeId>(), std::move(value));
                 }
             }
         }

@@ -44,7 +44,11 @@ config("config") {
     defines += [ "CONFIG_USE_LOCAL_STORAGE" ]
   }
 
-  cflags = [ "-Wconversion" ]
+  cflags = [
+    "-Wconversion",
+    "-fexceptions",
+    "-Wno-error",
+  ]
 }
 
 static_library("chip-tool-utils") {
@@ -146,11 +150,13 @@ static_library("chip-tool-utils") {
     "${chip_root}/src/platform",
     "${chip_root}/third_party/inipp",
     "${chip_root}/third_party/jsoncpp",
-    "${chip_root}/third_party/yaml-cpp",
   ]
 
   public_configs = [ ":config" ]
 
+  if (config_use_fuzzing) {
+    public_deps += [ "${chip_root}/third_party/yamlcpp" ]
+  }
   if (chip_enable_transport_trace) {
     public_deps +=
         [ "${chip_root}/examples/common/tracing:trace_handlers_decoder" ]
@@ -167,13 +173,6 @@ executable("chip-tool") {
     "${chip_root}/src/platform/logging:stdio",
   ]
   output_dir = root_out_dir
-  source_cflags = []
-  if (config_use_fuzzing) {
-    source_cflags += [ [
-          "commands/fuzzing/DeviceStateManager.cpp",
-          "-fexceptions",
-        ] ]
-  }
 }
 
 group("default") {

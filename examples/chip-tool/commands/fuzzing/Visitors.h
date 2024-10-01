@@ -37,12 +37,12 @@ extern template void ProcessDescriptorClusterResponse<ClusterId>(std::shared_ptr
                                                                  const chip::app::ConcreteDataAttributePath & path, NodeId node);
 } // namespace TLV
 
-AnyType * AttributeWrapperRead(AttributeWrapper * attribute);
+const AnyType & AttributeWrapperRead(AttributeWrapper * attribute);
 CHIP_ERROR AttributeWrapperWriteOrFail(AttributeWrapper * attribute, size_t & typeIndexAfterWrite,
-                                       size_t underlyingTypeIndexAfterWrite, const AnyType & aValue);
+                                       size_t & underlyingTypeIndexAfterWrite, AnyType && aValue);
 
-std::string AttributeValueAsString(const AnyType * attr);
-std::string AttributeTypeAsString(const AnyType * attr);
+std::string AttributeValueAsString(const AnyType & attr);
+std::string AttributeTypeAsString(const AnyType & attr);
 
 } // namespace Visitors
 } // namespace fuzzing

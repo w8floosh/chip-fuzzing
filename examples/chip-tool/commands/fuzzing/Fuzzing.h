@@ -40,6 +40,14 @@ public:
     void AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
                            const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
 
+    /**
+     * Analyzes a recoverable error occurred while reporting, i.e. errors on single attributes in a transaction that involves
+     * multiple ones. Currently it is only used when a read operation on an attribute with manufacturer-specific default value
+     * conformance is done. In such case, the attribute value is uninitialized and it needs to be written at least once before
+     * attempting a successful read.
+     */
+    void AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status);
+
     // Analyzes data coming from the OnError callbacks.
     void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
                              CHIP_ERROR expectedError = CHIP_NO_ERROR);
@@ -54,18 +62,19 @@ protected:
     friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
 
-    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc)
+    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
+                           fs::path dumpDirectory)
     {
-        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc]() {
-            return Fuzzer(dst, seedsDirectory, generationFunc);
+        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, dumpDirectory]() {
+            return Fuzzer(dst, seedsDirectory, generationFunc, dumpDirectory);
         };
         GetInstance(&init);
     }
     static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
-                           fs::path outputDirectory)
+                           fs::path dumpDirectory, fs::path outputDirectory)
     {
-        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, outputDirectory]() {
-            return Fuzzer(dst, seedsDirectory, generationFunc, outputDirectory);
+        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, dumpDirectory, outputDirectory]() {
+            return Fuzzer(dst, seedsDirectory, generationFunc, dumpDirectory, outputDirectory);
         };
         GetInstance(&init);
     }
@@ -85,10 +94,13 @@ protected:
     }
 
 private:
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc) :
-        mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc) {};
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path outputDirectory) :
-        mSeedsDirectory(seedsDirectory), mOracle(new Oracle()), mGenerationFunc(generationFunc)
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
+        mSeedsDirectory(seedsDirectory), mDeviceStateManager(DeviceStateManager(dumpDirectory)), mOracle(new Oracle()),
+        mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
+           fs::path outputDirectory) :
+        mSeedsDirectory(seedsDirectory), mDeviceStateManager(DeviceStateManager(dumpDirectory)), mOracle(new Oracle()),
+        mGenerationFunc(generationFunc), mCurrentDestination(dst)
     {
         mOutputDirectory.SetValue(outputDirectory);
     };
