@@ -36,7 +36,7 @@ struct AttributeWrapper
             break;
         }
     }
-    AttributeWrapper(TLVType aType, const AnyType & aValue, uint8_t bytes = 0,
+    AttributeWrapper(TLVType aType, AnyType && aValue, uint8_t bytes = 0,
                      AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
         type(aType), quality(aQuality), length(bytes)
     {
@@ -51,26 +51,33 @@ struct AttributeWrapper
         default:
             return;
         }
-        Write(aValue);
+        Write(std::move(aValue));
     }
     TLVType type;
     AttributeQualityEnum quality;
     uint8_t length;
     // TODO: Add support for nullable attributes
     std::variant<std::monostate, AnyType, chip::Optional<AnyType>> value = {};
-    AnyType * Read() { return Visitors::AttributeWrapperRead(this); }
-    CHIP_ERROR Write(const AnyType & aValue)
+
+    const AnyType & Read() { return Visitors::AttributeWrapperRead(this); }
+    CHIP_ERROR Write(AnyType && aValue)
     {
         size_t typeIndexBeforeWrite           = value.index();
-        size_t underlyingTypeIndexBeforeWrite = Read()->index();
+        size_t underlyingTypeIndexBeforeWrite = Read().index();
         size_t typeIndexAfterWrite            = UINT64_MAX;
         size_t underlyingTypeIndexAfterWrite  = UINT64_MAX;
 
         ReturnErrorOnFailure(
-            Visitors::AttributeWrapperWriteOrFail(this, typeIndexAfterWrite, underlyingTypeIndexAfterWrite, aValue));
+            Visitors::AttributeWrapperWriteOrFail(this, typeIndexAfterWrite, underlyingTypeIndexAfterWrite, std::move(aValue)));
         VerifyOrReturnError(typeIndexAfterWrite != UINT64_MAX && underlyingTypeIndexAfterWrite != UINT64_MAX, CHIP_ERROR_INTERNAL);
-        VerifyOrReturnError(typeIndexBeforeWrite != typeIndexAfterWrite, CHIP_FUZZER_ERROR_ATTRIBUTE_TYPE_MISMATCH);
-        VerifyOrReturnError(underlyingTypeIndexBeforeWrite != underlyingTypeIndexAfterWrite,
+
+        /**
+         * AttributeWrapper value type must remain identical, but underlying value type can change if and only if the value is
+         * being set for the first time. The only type change permitted is from std::monostate (uninitialized) to another type.
+         */
+        VerifyOrReturnError(typeIndexBeforeWrite == 0 || typeIndexBeforeWrite == typeIndexAfterWrite,
+                            CHIP_FUZZER_ERROR_ATTRIBUTE_TYPE_MISMATCH);
+        VerifyOrReturnError(underlyingTypeIndexBeforeWrite == 0 || underlyingTypeIndexBeforeWrite != underlyingTypeIndexAfterWrite,
                             CHIP_FUZZER_ERROR_ATTRIBUTE_TYPE_MISMATCH);
         return CHIP_NO_ERROR;
     }
@@ -96,7 +103,7 @@ struct AttributeWrapper
 struct AttributeFactory
 {
 public:
-    static std::shared_ptr<AttributeWrapper> Create(TLVType type, const AnyType & value, uint8_t length = 0,
+    static std::shared_ptr<AttributeWrapper> Create(TLVType type, AnyType && value, uint8_t length = 0,
                                                     AttributeQualityEnum quality = AttributeQualityEnum::kMandatory)
     {
         VerifyOrDie(quality != AttributeQualityEnum::kNullable);
@@ -105,7 +112,7 @@ public:
         {
             if (supportedType == key)
             {
-                return std::make_shared<AttributeWrapper>(type, value, length, quality);
+                return std::make_shared<AttributeWrapper>(type, std::move(value), length, quality);
             }
         }
         return nullptr; // Default factory logic

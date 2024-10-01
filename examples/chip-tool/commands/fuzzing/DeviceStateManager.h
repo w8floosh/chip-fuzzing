@@ -1,6 +1,7 @@
 #pragma once
 #include "AttributeFactory.h"
 #include "ForwardDeclarations.h"
+#include "Utils.h"
 #include <unordered_map>
 
 namespace DM = chip::app::DataModel;
@@ -56,51 +57,66 @@ public:
     {
         mValue = AttributeFactory::Create(aType, bytes, aQuality);
     }
-    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, const AnyType & value)
+    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
     {
-        mValue = AttributeFactory::Create(aType, value, bytes, aQuality);
+        mValue = AttributeFactory::Create(aType, std::move(value), bytes, aQuality);
     }
-    const AnyType * ReadCurrent()
+    const AnyType & ReadCurrent()
     {
-        VerifyOrReturnValue(mValue != nullptr, nullptr);
+        VerifyOrReturnValue(mReadable && (mValue != nullptr), kInvalidValue);
         return mValue->Read();
     }
-    const AnyType * ReadLast()
+    const AnyType & ReadLast()
     {
-        VerifyOrReturnValue(mOldValue != nullptr, nullptr);
+        VerifyOrReturnValue(mReadable && (mOldValue != nullptr), kInvalidValue);
         return mOldValue->Read();
     }
-    CHIP_ERROR Write(const AnyType & value)
+    CHIP_ERROR Write(AnyType && value)
     {
         VerifyOrReturnError(mValue != nullptr, CHIP_ERROR_INCORRECT_STATE);
-        mOldValue = std::move(mValue);
-        ReturnErrorOnFailure(mValue->Write(value));
+        // Move the current value to the older pointer AFTER the new value write has been successful (for state consistency)
+        auto old = std::make_shared<AttributeWrapper>(*mValue);
+        ReturnErrorOnFailure(mValue->Write(std::move(value)));
+        mOldValue = std::move(old);
+        mReadable = true;
         return CHIP_NO_ERROR;
     }
 
-    CHIP_ERROR LazyInitialize(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, const AnyType & value)
+    CHIP_ERROR LazyInitialize(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
     {
-        mValue = AttributeFactory::Create(aType, value, bytes, aQuality);
+        mValue = std::move(AttributeFactory::Create(aType, std::move(value), bytes, aQuality));
         VerifyOrReturnError(mValue != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
         return CHIP_NO_ERROR;
     }
 
+    // If the attribute is unreadable, any read access to it is denied
+    void ToggleBlockReads() { mReadable = !mReadable; }
+    bool IsReadable() { return mReadable; }
+
 private:
+    // Some attributes may be blocked or uninitialized, e.g. when reading them, the device returns a 0x01 status code (FAILURE)
+    bool mReadable                              = true;
     std::shared_ptr<AttributeWrapper> mValue    = nullptr;
     std::shared_ptr<AttributeWrapper> mOldValue = nullptr;
+};
+
+struct DeviceTypeStruct
+{
+    DeviceTypeId id;
+    uint16_t revision;
 };
 
 struct ClusterState
 {
     ClusterId clusterId;
-    int clusterRevision;
+    uint16_t clusterRevision;
     std::unordered_map<AttributeId, AttributeState> attributes;
 };
 
 struct EndpointState
 {
     EndpointId endpointId;
-    DeviceTypeId deviceTypeId;
+    std::vector<DeviceTypeStruct> deviceTypes;
     std::unordered_map<ClusterId, ClusterState> clusters;
 };
 
@@ -136,35 +152,41 @@ public:
 class DeviceStateManager
 {
 public:
-    DeviceStateManager() {};
+    DeviceStateManager(fs::path dumpDir) : mDumpDirectory(dumpDir)
+    {
+        if (!fs::exists(mDumpDirectory))
+        {
+            VerifyOrDie(fs::create_directory(mDumpDirectory));
+        }
+    };
     ~DeviceStateManager() {};
 
-    const auto ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, bool current = true);
+    const AnyType & ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, bool current = true);
     AttributeState & GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
-    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, const AnyType & aValue);
+    void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, AnyType && aValue);
 
-    auto List() { return mDeviceState.nodes; }
+    auto List() { return &mDeviceState.nodes; }
     auto List(NodeId node)
     {
         VerifyOrDie(mDeviceState(node) != nullptr);
-        return mDeviceState(node)->endpoints;
+        return &mDeviceState(node)->endpoints;
     }
     auto List(NodeId node, EndpointId endpoint)
     {
         VerifyOrDie(mDeviceState(node, endpoint) != nullptr);
-        return mDeviceState(node, endpoint)->clusters;
+        return &mDeviceState(node, endpoint)->clusters;
     }
     auto List(NodeId node, EndpointId endpoint, ClusterId cluster)
     {
         VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
-        return mDeviceState(node, endpoint, cluster)->attributes;
+        return &mDeviceState(node, endpoint, cluster)->attributes;
     }
 
     // The Add methods are used to add new nodes, endpoints, clusters, and attributes to the device state.
     void Add(NodeId node);
     void Add(NodeId node, EndpointId endpoint);
-    void Add(NodeId node, EndpointId endpoint, DeviceTypeId deviceType);
-    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, int revision);
+    void Add(NodeId node, EndpointId endpoint, DeviceTypeStruct deviceType);
+    void Add(NodeId node, EndpointId endpoint, ClusterId cluster, uint16_t revision = 5U);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
 
     /**

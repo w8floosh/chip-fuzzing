@@ -46,9 +46,9 @@ void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::ap
         }
         else
         {
-            helper.WriteToDeviceState(
-                std::move(output),
-                mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId));
+            auto & attributeState =
+                mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId);
+            helper.WriteToDeviceState(std::move(output), attributeState);
         }
     }
 
@@ -76,6 +76,13 @@ void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader,
     mOracle->Consume(*status, expectedStatus);
 }
 
+void fuzz::Fuzzer::AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status)
+{
+    auto & attributeState =
+        mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId);
+    if (attributeState.IsReadable())
+        attributeState.ToggleBlockReads();
+}
 void fuzz::Fuzzer::AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
                                        CHIP_ERROR expectedError)
 {}
@@ -84,11 +91,11 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
 {
     namespace fs = std::filesystem;
     auto now     = std::chrono::system_clock::now();
-    auto now_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    auto now_ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
 
     // Create seed hash from current timestamp
     std::hash<std::string> hasher;
-    size_t hashedValue = hasher(std::to_string(now_ms.count()));
+    size_t hashedValue = hasher(std::to_string(now_ms));
 
     std::string fileName(std::to_string(hashedValue)); // Convert hash to hex string
 
