@@ -120,16 +120,28 @@ struct EndpointState
     std::unordered_map<ClusterId, ClusterState> clusters;
 };
 
+struct BasicInformation
+{
+    uint16_t dmRevision           = 0;
+    std::string vendorName        = "";
+    uint16_t vendorId             = 0;
+    uint16_t productId            = 0;
+    uint16_t hwVersion            = 0;
+    uint32_t swVersion            = 0;
+    std::string manufacturingDate = "";
+    std::string serialNumber      = "";
+};
+
 struct NodeState
 {
+    NodeId nodeId;
+    BasicInformation nodeInfo;
     std::unordered_map<EndpointId, EndpointState> endpoints;
 };
 
 struct DeviceState
 {
 public:
-    FabricId fabric;
-    VendorId vendor;
     std::unordered_map<NodeId, NodeState> nodes;
 
     NodeState * operator()(NodeId id);
@@ -165,6 +177,11 @@ public:
     AttributeState & GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
     void WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, AnyType && aValue);
 
+    const auto GetNodeInformation(NodeId node)
+    {
+        VerifyOrDie(mDeviceState(node) != nullptr);
+        return &mDeviceState(node)->nodeInfo;
+    }
     auto List() { return &mDeviceState.nodes; }
     auto List(NodeId node)
     {
@@ -184,6 +201,7 @@ public:
 
     // The Add methods are used to add new nodes, endpoints, clusters, and attributes to the device state.
     void Add(NodeId node);
+    void Add(NodeId node, BasicInformation info);
     void Add(NodeId node, EndpointId endpoint);
     void Add(NodeId node, EndpointId endpoint, DeviceTypeStruct deviceType);
     void Add(NodeId node, EndpointId endpoint, ClusterId cluster, uint16_t revision = 5U);

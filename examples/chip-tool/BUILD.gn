@@ -101,7 +101,7 @@ static_library("chip-tool-utils") {
     ]
   }
 
-  if (config_use_fuzzing) {
+  if (config_use_blackbox_fuzzing) {
     sources += [
       "${chip_root}/src/app/tests/integration/common.cpp",
       "${chip_root}/src/app/tests/integration/common.h",
@@ -119,6 +119,8 @@ static_library("chip-tool-utils") {
       "commands/fuzzing/Utils.h",
       "commands/fuzzing/Visitors.cpp",
       "commands/fuzzing/Visitors.h",
+      "commands/fuzzing/generation/RuntimeGrammarManager.cpp",
+      "commands/fuzzing/generation/RuntimeGrammarManager.h",
       "commands/fuzzing/generation/Wrappers.cpp",
       "commands/fuzzing/tlv/DecodedTLVElement.h",
       "commands/fuzzing/tlv/TLVDataPayloadHelper.cpp",
@@ -154,7 +156,7 @@ static_library("chip-tool-utils") {
 
   public_configs = [ ":config" ]
 
-  if (config_use_fuzzing) {
+  if (config_use_blackbox_fuzzing) {
     public_deps += [ "${chip_root}/third_party/yamlcpp" ]
   }
   if (chip_enable_transport_trace) {

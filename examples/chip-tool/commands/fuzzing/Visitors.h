@@ -28,13 +28,16 @@ T TryConvertPrimitiveType(std::shared_ptr<DecodedTLVElement> element);
 extern template uint32_t TryConvertPrimitiveType<uint32_t>(std::shared_ptr<DecodedTLVElement> element);
 
 template <typename T>
-void ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVElement> decoded, const chip::app::ConcreteDataAttributePath & path,
+void ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVElement> decoded, const app::ConcreteDataAttributePath & path,
                                       NodeId node);
 
 extern template void ProcessDescriptorClusterResponse<EndpointId>(std::shared_ptr<DecodedTLVElement> decoded,
-                                                                  const chip::app::ConcreteDataAttributePath & path, NodeId node);
+                                                                  const app::ConcreteDataAttributePath & path, NodeId node);
 extern template void ProcessDescriptorClusterResponse<ClusterId>(std::shared_ptr<DecodedTLVElement> decoded,
-                                                                 const chip::app::ConcreteDataAttributePath & path, NodeId node);
+                                                                 const app::ConcreteDataAttributePath & path, NodeId node);
+
+void ProcessBasicInformationClusterResponse(std::shared_ptr<DecodedTLVElement> decoded, const app::ConcreteDataAttributePath & path,
+                                            NodeId node);
 } // namespace TLV
 
 const AnyType & AttributeWrapperRead(AttributeWrapper * attribute);

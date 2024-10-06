@@ -1,4 +1,5 @@
 #include "Visitors.h"
+#include "DeviceStateManager.h"
 #include "Fuzzing.h"
 #include "tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
@@ -150,8 +151,65 @@ template void Visitors::TLV::ProcessDescriptorClusterResponse<chip::ClusterId>(s
                                                                                const chip::app::ConcreteDataAttributePath & path,
                                                                                NodeId node);
 
-CHIP_ERROR
-Visitors::TLV::PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::shared_ptr<DecodedTLVElement> dst)
+void Visitors::TLV::ProcessBasicInformationClusterResponse(std::shared_ptr<DecodedTLVElement> decoded,
+                                                           const chip::app::ConcreteDataAttributePath & path, NodeId node)
+{
+    VerifyOrReturn(std::holds_alternative<ContainerType>(decoded->content));
+    auto element = std::get<ContainerType>(decoded->content);
+    std::visit(
+        [&](auto && arg) {
+            using arg_t = std::decay_t<decltype(arg)>;
+            // The only containers the basic information cluster returns are CapabilityMinima and ProductAppearance, which we don't
+            // care about.
+            BasicInformation info;
+            auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+
+            if constexpr (std::is_same_v<arg_t, ContainerType>)
+                return;
+            else if constexpr (std::is_same_v<arg_t, std::string>)
+            {
+                switch (path.mAttributeId)
+                {
+                case chip::app::Clusters::BasicInformation::Attributes::VendorName::Id:
+                    info.vendorName = arg;
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::ManufacturingDate::Id:
+                    info.manufacturingDate = arg;
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::SerialNumber::Id:
+                    info.serialNumber = arg;
+                    break;
+                }
+            }
+            else if constexpr (std::is_convertible_v<arg_t, uint64_t>)
+            {
+                switch (path.mAttributeId)
+                {
+                case chip::app::Clusters::BasicInformation::Attributes::DataModelRevision::Id:
+                    info.dmRevision = static_cast<uint16_t>(arg);
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::VendorID::Id:
+                    info.vendorId = static_cast<uint16_t>(arg);
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::HardwareVersion::Id:
+                    info.hwVersion = static_cast<uint16_t>(arg);
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::ProductID::Id:
+                    info.productId = static_cast<uint16_t>(arg);
+                    break;
+                case chip::app::Clusters::BasicInformation::Attributes::SoftwareVersion::Id:
+                    info.swVersion = static_cast<uint32_t>(arg);
+                    break;
+                }
+            }
+            else
+                return;
+            deviceState->Add(node, info);
+        },
+        element[0]->content);
+}
+
+CHIP_ERROR Visitors::TLV::PushToContainer(std::shared_ptr<DecodedTLVElement> element, std::shared_ptr<DecodedTLVElement> dst)
 {
     return std::visit(
         [&](auto & container) -> CHIP_ERROR {
@@ -255,7 +313,7 @@ std::string Visitors::AttributeTypeAsString(const AnyType & attr)
             using T = std::decay_t<decltype(v)>;
             if constexpr (std::is_same_v<T, bool>)
             {
-                return v ? std::string("true") : std::string("false");
+                return std::string("boolean");
             }
             else if constexpr (std::is_same_v<T, char *>)
             {

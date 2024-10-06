@@ -29,9 +29,17 @@ fuzz::OracleStatus & fuzz::Oracle::Consume(const CHIP_ERROR & actual, const CHIP
     return mCurrentStatus;
 } // namespace chip::fuzzing
 
-template <class com_t, class attr_t>
-bool fuzz::OracleRule<com_t, attr_t>::operator()(std::any value)
+fuzz::OracleResult fuzz::OracleRuleMap::Query(const chip::app::ConcreteDataAttributePath & path,
+                                              const chip::Protocols::InteractionModel::Status & receivedStatus)
 {
-    // TODO
-    return true;
+    return OracleResult(0, OracleRuleMap::kInvalidClusterOracleRule);
+}
+
+void fuzz::OracleRuleMap::Add(chip::app::ConcreteDataAttributePath path,
+                              const chip::Protocols::InteractionModel::Status & expectedStatus)
+{
+    auto key = std::make_tuple(path.mClusterId, path.mAttributeId);
+    mMap.emplace(key, OracleRule(path, expectedStatus));
+    mNoRulesForCluster[std::get<0>(key)]++;
+    mNoRulesForAttribute[std::get<1>(key)]++;
 }

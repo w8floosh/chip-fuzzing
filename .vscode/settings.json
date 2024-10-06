@@ -157,7 +157,8 @@
         "netfwd": "cpp",
         "filesystem": "cpp",
         "*.inc": "cpp",
-        "*.def": "cpp"
+        "*.def": "cpp",
+        "ranges": "cpp"
     },
     // Configure paths or glob patterns to exclude from file watching.
     "files.watcherExclude": {
@@ -168,6 +169,7 @@
     },
     "files.eol": "\n",
     "editor.formatOnSave": true,
+    "editor.linkedEditing": true,
     "better-comments.tags": [
         {
             "tag": "!",

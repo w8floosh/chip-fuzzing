@@ -425,6 +425,7 @@
                 "--iterations",
                 "2000"
             ],
+            "env": {"CONDA_PREFIX": "${env:HOME}/.conda/envs/matter", "PATH": "${env:PATH}"},
             "cwd": "${workspaceFolder}",
             "breakpointMode": "path"
             // "stdio": [
