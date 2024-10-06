@@ -31,12 +31,11 @@ struct AttributeWrapper;
 class AttributeState;
 class DeviceStateManager;
 class Oracle;
+class OracleRule;
 struct ClusterState;
 struct EndpointState;
 struct NodeState;
 struct DeviceState;
-template <class com_t, class attr_t>
-struct OracleRule;
 
 std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
 
@@ -49,6 +48,7 @@ inline TLVTag ExtractTagFromControlByte(uint16_t controlByte);
 inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte);
 } // namespace TLV
 namespace generation {
+class RuntimeGrammarManager;
 const char * GenerateCommandSeedOnly(fs::path seedsDir);
 } // namespace generation
 namespace utils {

@@ -2,7 +2,6 @@
 #include "../clusters/DataModelLogger.h"
 #include "../common/CHIPCommand.h"
 #include "../common/Commands.h"
-#include "DeviceStateManager.h"
 #include "ForwardDeclarations.h"
 #include "Fuzzing.h"
 
@@ -64,5 +63,6 @@ private:
     CHIP_ERROR InitializeFuzzer();
 
     CHIP_ERROR AcquireRemoteDataModel(chip::NodeId node);
+    CHIP_ERROR AcquireBasicInformation(chip::NodeId, int * status);
     const char * GenerateCommand(chip::ClusterId cluster);
 };

@@ -23,7 +23,7 @@ void fuzz::Fuzzer::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chi
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
     // TODO: For each error, log a line showing command, error type and error description
-    mOracle->Consume(status, expectedStatus);
+    // mOracle->Consume(path, status, expectedStatus);
 }
 
 void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
@@ -44,17 +44,21 @@ void fuzz::Fuzzer::AnalyzeReportData(chip::TLV::TLVReader * data, const chip::ap
         {
             ProcessDescriptorClusterResponse(output, path, mCurrentDestination);
         }
+        else if (path.mClusterId == chip::app::Clusters::BasicInformation::Id)
+        {
+            Visitors::TLV::ProcessBasicInformationClusterResponse(output, path, mCurrentDestination);
+        }
         else
         {
             auto & attributeState =
                 mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId);
             helper.WriteToDeviceState(std::move(output), attributeState);
+            // mOracle->Consume(path, attributeState, status);
         }
     }
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
     // TODO: For each error, log a line showing command, error type and error description
-    mOracle->Consume(status, expectedStatus);
 }
 
 void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
@@ -73,7 +77,7 @@ void fuzz::Fuzzer::AnalyzeReportData(const chip::app::EventHeader & eventHeader,
 
     // TODO: Parse the TLV data and call mOracle.Consume() on every attribute/path scanned
     // TODO: For each error, log a line showing command, error type and error description
-    mOracle->Consume(*status, expectedStatus);
+    // mOracle->Consume(*status, expectedStatus);
 }
 
 void fuzz::Fuzzer::AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status)
