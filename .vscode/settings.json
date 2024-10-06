@@ -158,7 +158,8 @@
         "netfwd": "cpp",
         "filesystem": "cpp",
         "*.inc": "cpp",
-        "*.def": "cpp"
+        "*.def": "cpp",
+        "ranges": "cpp"
     },
     "[ini]": {
         "editor.formatOnSave": false
@@ -172,6 +173,7 @@
     },
     "files.eol": "\n",
     "editor.formatOnSave": true,
+    "editor.linkedEditing": true,
     "better-comments.tags": [
         {
             "tag": "!",

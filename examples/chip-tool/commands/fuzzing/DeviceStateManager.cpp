@@ -203,8 +203,48 @@ void fuzz::DeviceStateManager::Add(NodeId node)
 {
     VerifyOrReturn(mDeviceState(node) == nullptr);
     NodeState state{};
-    auto pair = mDeviceState.nodes.emplace(node, state);
-    VerifyOrDieWithMsg(pair.second, chipFuzzer, "pacchitosoru");
+    VerifyOrDie(mDeviceState.nodes.emplace(node, state).second);
+}
+
+void fuzz::DeviceStateManager::Add(NodeId node, BasicInformation aInfo)
+{
+    if (mDeviceState(node) == nullptr)
+    {
+        Add(node);
+    }
+    BasicInformation & nodeInfo = mDeviceState(node)->nodeInfo;
+    if (!nodeInfo.dmRevision)
+    {
+        nodeInfo.dmRevision = aInfo.dmRevision;
+    }
+    if (!nodeInfo.vendorId)
+    {
+        nodeInfo.vendorId = aInfo.vendorId;
+    }
+    if (!nodeInfo.hwVersion)
+    {
+        nodeInfo.hwVersion = aInfo.hwVersion;
+    }
+    if (!nodeInfo.productId)
+    {
+        nodeInfo.productId = aInfo.productId;
+    }
+    if (!nodeInfo.swVersion)
+    {
+        nodeInfo.swVersion = aInfo.swVersion;
+    }
+    if (nodeInfo.vendorName == "")
+    {
+        nodeInfo.vendorName = aInfo.vendorName;
+    }
+    if (nodeInfo.manufacturingDate == "")
+    {
+        nodeInfo.manufacturingDate = aInfo.manufacturingDate;
+    }
+    if (nodeInfo.serialNumber == "")
+    {
+        nodeInfo.serialNumber = aInfo.serialNumber;
+    }
 }
 
 void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
