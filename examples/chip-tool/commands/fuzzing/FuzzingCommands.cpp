@@ -195,12 +195,6 @@ void FuzzingCommand::ExecuteCommand(const char * command, int * status)
 
 CHIP_ERROR FuzzingStartCommand::AcquireBasicInformation(NodeId nodeId, int * status)
 {
-    // uint16_t dmRevision;
-    // std::string vendorName;
-    // VendorId vendorId;
-    // std::string productName;
-    // ProductId productId;
-    // uint16_t hwVersion;
     std::ostringstream command = std::ostringstream() << "basicinformation read data-model-revision " << nodeId << " 0";
     ExecuteCommand(command.str().c_str(), status);
     VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
@@ -319,11 +313,13 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
         mStatefulFuzzingEnabled = true;
         mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument.Value()));
         VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_FILESYSTEM_ERROR);
-        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, fs::path("statedumps"), mOutputDirectory.Value());
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc,
+                                 fs::path("out/debug/standalone/chip-fuzzer/statedumps"), mOutputDirectory.Value());
     }
     else
     {
-        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc, fs::path("statedumps"));
+        fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc,
+                                 fs::path("out/debug/standalone/chip-fuzzer/statedumps"));
     }
 
     kGenerationFunc = nullptr;
@@ -346,8 +342,8 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     VerifyOrReturnError(endpointList && CHIP_NO_ERROR == AcquireBasicInformation(mDestinationId, &status),
                         CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-    std::string testcasesDirectory          = "out/testcases";
-    std::string generatedGrammarsDirectory  = "out/debug/standalone/chip-fuzzer-grammars";
+    std::string testcasesDirectory          = "out/debug/standalone/chip-fuzzer/testcases";
+    std::string generatedGrammarsDirectory  = "out/debug/standalone/chip-fuzzer/grammars";
     const fuzz::BasicInformation * nodeInfo = deviceStateManager->GetNodeInformation(mDestinationId);
     fuzz::generation::RuntimeGrammarManager grammarManager(nodeInfo, generatedGrammarsDirectory);
     grammarManager.CreateGrammar(deviceStateManager, mDestinationId);
@@ -378,7 +374,7 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
                 ReorderCommandArgs(commandArgs);
 
                 std::string reorderedCommandArgs = commandArgs.str();
-                reorderedCommandArgs.pop_back(); // Remove the last space
+                // reorderedCommandArgs.pop_back(); // Remove the last space
                 command << "any command-by-id " << reorderedCommandArgs;
 
                 ExecuteCommand(command.str().c_str(), &status);

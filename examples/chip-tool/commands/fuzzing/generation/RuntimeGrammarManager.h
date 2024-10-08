@@ -18,23 +18,24 @@ public:
                  << nodeInfo->swVersion << std::dec;
         if (!fs::exists(baseDir))
         {
-            VerifyOrDie(fs::create_directory(baseDir));
+            VerifyOrDie(fs::create_directories(baseDir));
         }
-        grammarId                     = filename.str();
-        fs::path mGrammarSubdirectory = baseDir / grammarId;
+        mGrammarId                    = filename.str();
+        fs::path mGrammarSubdirectory = baseDir / mGrammarId;
         if (!fs::exists(mGrammarSubdirectory))
         {
-            VerifyOrDie(fs::create_directory(mGrammarSubdirectory));
+            VerifyOrDie(fs::create_directories(mGrammarSubdirectory));
         }
-        mGeneratedLexerPath  = mGrammarSubdirectory / (grammarId + "_Lexer.g4");
-        mGeneratedParserPath = mGrammarSubdirectory / (grammarId + "_Parser.g4");
+        mGeneratedLexerPath  = mGrammarSubdirectory / (mGrammarId + "_Lexer.g4");
+        mGeneratedParserPath = mGrammarSubdirectory / (mGrammarId + "_Parser.g4");
         SetPythonExecutable();
         VerifyOrDieWithMsg(IsGrammarinatorInstalled(), chipFuzzer,
                            "Python package 'grammarinator' is required for fuzzer grammar generation.");
     };
     ~RuntimeGrammarManager() = default;
 
-    std::string grammarId;
+    std::string mGrammarId;
+
     void CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node);
     void GenerateTestCases(fs::path outDir, size_t numCases, uint16_t maxDepth = 12);
 
@@ -45,10 +46,9 @@ private:
     fs::path mGeneratedParserPath;
     std::string mPythonExecutable;
     std::string mEnvPrefix;
-    // .stem() used twice because the path is generated as "path/to/filename(.lexer|.parser).g4"
+
     std::string GetLexerName() { return mGeneratedLexerPath.stem().string(); }
     std::string GetParserName() { return mGeneratedParserPath.stem().string(); }
-
     void SetPythonExecutable();
     bool IsGrammarinatorInstalled();
 };
