@@ -44,6 +44,10 @@ config("config") {
     defines += [ "CONFIG_USE_LOCAL_STORAGE" ]
   }
 
+  if (config_use_blackbox_fuzzing) {
+    defines += [ "CONFIG_USE_BLACKBOX_FUZZING=${config_use_blackbox_fuzzing}" ]
+  }
+
   cflags = [
     "-Wconversion",
     "-fexceptions",

@@ -37,6 +37,4 @@ LSQUARE: '[';
 RSQUARE: ']';
 COMMA: ',';
 COLON: ':';
-SQUOTE: '\'';
-// WS: [ \t\n\r]+ -> skip;
 SPACE: ' ';

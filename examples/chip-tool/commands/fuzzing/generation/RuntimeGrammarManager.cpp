@@ -32,19 +32,27 @@ void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState,
     size_t scannedEndpoints = 0;
     for (auto & endpoint : endpoints)
     {
+        if (!endpoint.second.clusters.size())
+            continue;
         commandToken << "E" << endpoint.first;
         std::ostringstream endpointToken("E" + std::to_string(endpoint.first) + ": ", std::ios_base::ate);
         endpointToken << "'" << std::to_string(endpoint.first) << "' SPACE (";
         size_t scannedClusters = 0;
         for (auto & cluster : endpoint.second.clusters)
         {
-            endpointToken << "CL" << cluster.first;
-            std::ostringstream clusterToken("CL" + std::to_string(cluster.first) + ": ", std::ios_base::ate);
-            clusterToken << "'" << std::to_string(cluster.first) << "' SPACE (";
-
             auto attr = cluster.second.attributes.find(chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id);
             VerifyOrDie(attr != cluster.second.attributes.end());
             auto commandList = std::get<ContainerType>(attr->second.ReadCurrent());
+            // Creating a token when the command list is empty would generate a token "'x' SPACE ()", which would be invalid.
+            if (!commandList.size())
+            {
+                scannedClusters++;
+                continue;
+            }
+
+            endpointToken << "E" << endpoint.first << "CL" << cluster.first;
+            std::ostringstream clusterToken("E" + std::to_string(endpoint.first), std::ios_base::ate);
+            clusterToken << "CL" << cluster.first << ": '" << std::to_string(cluster.first) << "' SPACE (";
             for (size_t i = 0; i < commandList.size(); i++)
             {
                 auto commandId = chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(commandList[i]);
@@ -92,7 +100,7 @@ void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState,
         }
         else if (line.find("}") != std::string::npos)
         {
-            line = "}\n\nargs: CMDPATH SPACE SQUOTE payload SQUOTE EOF;";
+            line = "}\n\nargs: CMDPATH SPACE payload EOF;";
         }
         generatedParserFile << line << "\n";
     }
@@ -104,7 +112,7 @@ void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState,
 
     VerifyOrDieWithMsg(!generatedLexerFile.is_open(), chipFuzzer, "Lexer file was in an incorrect state.");
     VerifyOrDieWithMsg(!generatedParserFile.is_open(), chipFuzzer, "Parser file was in an incorrect state.");
-    ChipLogProgress(chipFuzzer, "Grammar files generated successfully.");
+    ChipLogProgress(chipFuzzer, "Grammar files generated successfully: GrammarID: %s.", mGrammarId.c_str());
 
     std::ostringstream processCommand(mPythonExecutable, std::ios_base::ate);
     std::string grammarinatorProcessFile = std::string(mEnvPrefix + "/bin/grammarinator-process");
@@ -112,13 +120,6 @@ void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState,
     std::string baseParserFilename       = mBaseParserPath.string();
     std::string generatedLexerFilename   = mGeneratedLexerPath.string();
     std::string generatedParserFilename  = mGeneratedParserPath.string();
-
-    // const char * argv[5];
-    // argv[0] = grammarinatorProcessFile.c_str();
-    // argv[1] = baseLexerFilename.c_str();
-    // argv[2] = "-o";
-    // argv[3] = generatedLexerFilename.c_str();
-    // argv[4] = "--no-actions";
 
     processCommand << " " << grammarinatorProcessFile << " " << generatedLexerFilename << " " << generatedParserFilename << " -o "
                    << mGeneratedLexerPath.parent_path().string() << " --no-actions";
@@ -160,9 +161,9 @@ void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outDir, size_t numCa
     if (!std::filesystem::exists(outDir))
     {
         if (!std::filesystem::exists(outDir.parent_path()))
-            VerifyOrDieWithMsg(!std::filesystem::create_directories(outDir), chipFuzzer, "Failed to create output directory.");
+            VerifyOrDieWithMsg(std::filesystem::create_directories(outDir), chipFuzzer, "Failed to create output directory.");
         else
-            VerifyOrDieWithMsg(!std::filesystem::create_directory(outDir), chipFuzzer, "Failed to create output directory.");
+            VerifyOrDieWithMsg(std::filesystem::create_directory(outDir), chipFuzzer, "Failed to create output directory.");
     }
     std::ostringstream command(mPythonExecutable, std::ios_base::ate);
 

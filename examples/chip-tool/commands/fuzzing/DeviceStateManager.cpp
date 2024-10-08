@@ -64,41 +64,41 @@ CHIP_ERROR LoadValue(const YAML::detail::iterator_value & attribute, fuzz::AnyTy
     {
         value = attribute["value"].as<bool>();
     }
-    else if (attribute["type"].as<std::string>() == "byte string")
+    else if (attribute["type"].as<std::string>() == "bytes")
     {
         char * byteString = new char[attribute["value"].as<std::string>().size() + 1];
         strncpy(byteString, attribute["value"].as<std::string>().c_str(), attribute["value"].as<std::string>().size() + 1);
         value = byteString;
     }
-    else if (attribute["type"].as<std::string>() == "unsigned integer 1")
+    else if (attribute["type"].as<std::string>() == "uint8")
     {
         value = attribute["value"].as<uint8_t>();
     }
-    else if (attribute["type"].as<std::string>() == "unsigned integer 2")
+    else if (attribute["type"].as<std::string>() == "uint16")
     {
         value = attribute["value"].as<uint16_t>();
     }
-    else if (attribute["type"].as<std::string>() == "unsigned integer 4")
+    else if (attribute["type"].as<std::string>() == "uint32")
     {
         value = attribute["value"].as<uint32_t>();
     }
-    else if (attribute["type"].as<std::string>() == "unsigned integer 8")
+    else if (attribute["type"].as<std::string>() == "uint64")
     {
         value = attribute["value"].as<uint64_t>();
     }
-    else if (attribute["type"].as<std::string>() == "signed integer 1")
+    else if (attribute["type"].as<std::string>() == "int8")
     {
         value = attribute["value"].as<int8_t>();
     }
-    else if (attribute["type"].as<std::string>() == "signed integer 2")
+    else if (attribute["type"].as<std::string>() == "int16")
     {
         value = attribute["value"].as<int16_t>();
     }
-    else if (attribute["type"].as<std::string>() == "signed integer 4")
+    else if (attribute["type"].as<std::string>() == "int32")
     {
         value = attribute["value"].as<int32_t>();
     }
-    else if (attribute["type"].as<std::string>() == "signed integer 8")
+    else if (attribute["type"].as<std::string>() == "int64")
     {
         value = attribute["value"].as<int64_t>();
     }
@@ -110,7 +110,7 @@ CHIP_ERROR LoadValue(const YAML::detail::iterator_value & attribute, fuzz::AnyTy
     {
         value = attribute["value"].as<double>();
     }
-    else if (attribute["type"].as<std::string>() == "utf8 string")
+    else if (attribute["type"].as<std::string>() == "string")
     {
         value = attribute["value"].as<std::string>();
     }
