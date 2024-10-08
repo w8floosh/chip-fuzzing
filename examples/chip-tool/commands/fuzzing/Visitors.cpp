@@ -317,39 +317,39 @@ std::string Visitors::AttributeTypeAsString(const AnyType & attr)
             }
             else if constexpr (std::is_same_v<T, char *>)
             {
-                return std::string("byte string");
+                return std::string("bytes");
             }
             else if constexpr (std::is_same_v<T, uint8_t>)
             {
-                return std::string("unsigned integer 1");
+                return std::string("uint8");
             }
             else if constexpr (std::is_same_v<T, uint16_t>)
             {
-                return std::string("unsigned integer 2");
+                return std::string("uint16");
             }
             else if constexpr (std::is_same_v<T, uint32_t>)
             {
-                return std::string("unsigned integer 4");
+                return std::string("uint32");
             }
             else if constexpr (std::is_same_v<T, uint64_t>)
             {
-                return std::string("unsigned integer 8");
+                return std::string("uint64");
             }
             else if constexpr (std::is_same_v<T, int8_t>)
             {
-                return std::string("signed integer 1");
+                return std::string("int8");
             }
             else if constexpr (std::is_same_v<T, int16_t>)
             {
-                return std::string("signed integer 2");
+                return std::string("int16");
             }
             else if constexpr (std::is_same_v<T, int32_t>)
             {
-                return std::string("signed integer 4");
+                return std::string("int32");
             }
             else if constexpr (std::is_same_v<T, int64_t>)
             {
-                return std::string("signed integer 8");
+                return std::string("int64");
             }
             else if constexpr (std::is_same_v<T, float>)
             {
@@ -361,7 +361,7 @@ std::string Visitors::AttributeTypeAsString(const AnyType & attr)
             }
             else if constexpr (std::is_same_v<T, std::string>)
             {
-                return std::string("utf8 string");
+                return std::string("string");
             }
             else if constexpr (std::is_same_v<T, ContainerType>)
             {

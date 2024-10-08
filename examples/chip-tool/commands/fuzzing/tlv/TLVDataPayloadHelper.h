@@ -31,25 +31,6 @@ inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte)
     }
 };
 
-// inline uint8_t ExtractBytesFromElementLength(uint32_t len)
-// {
-//     if (len <= UINT8_MAX)
-//         return 1;
-
-//     uint8_t usedBytes = 0;
-//     while (len > 0)
-//     {
-//         usedBytes++;
-//         len >>= 8;
-//     }
-
-//     usedBytes--;
-//     usedBytes |= usedBytes >> 1;
-//     usedBytes |= usedBytes >> 2;
-//     usedBytes |= usedBytes >> 4;
-//     return ++usedBytes;
-// };
-
 /**
  * @brief Helper class to decode and encode TLV data payloads coming from response callbacks.
  */
@@ -62,14 +43,7 @@ public:
     CHIP_ERROR Encode(std::shared_ptr<DecodedTLVElement> src);
     CHIP_ERROR WriteToDeviceState(std::shared_ptr<DecodedTLVElement> && src, AttributeState & attributeState);
     CHIP_ERROR PushToContainer(std::shared_ptr<DecodedTLVElement> && element, std::shared_ptr<DecodedTLVElement> dst);
-    CHIP_ERROR
-    LoadClusterSnapshot(fs::path src, ClusterState & state, bool fromJSON = false);
-    CHIP_ERROR LoadClusterSnapshot(fs::path src, chip::TLV::TLVWriter & writer, bool fromJSON = false);
-    CHIP_ERROR LoadClusterSnapshot(fs::path src, std::string & jsonStr, bool fromJSON = false);
-    CHIP_ERROR SaveClusterSnapshot(fs::path dst, ClusterState & state, bool toJSON = false);
-    CHIP_ERROR SaveClusterSnapshot(fs::path dst, ClusterState & state, std::string lastCommand, bool toJSON = false);
-    CHIP_ERROR SaveClusterSnapshot(fs::path dst, ClusterState & state, std::vector<std::string> commandHistory,
-                                   bool toJSON = false);
+
     void Print() { PrettyPrint(); }
 
     template <typename T, typename std::enable_if<std::is_invocable_v<decltype(&T::LogPath), T>>::type * = nullptr>
