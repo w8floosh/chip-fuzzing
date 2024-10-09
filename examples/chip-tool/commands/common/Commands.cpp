@@ -37,7 +37,9 @@
 namespace {
 
 char kInteractiveModeName[]                         = "";
+char kFuzzingModeName[]                             = "";
 constexpr size_t kInteractiveModeArgumentsMaxLength = 32;
+constexpr size_t kFuzzingModeArgumentsMaxLength     = kInteractiveModeArgumentsMaxLength;
 constexpr char kOptionalArgumentPrefix[]            = "--";
 constexpr char kJsonClusterKey[]                    = "cluster";
 constexpr char kJsonCommandKey[]                    = "command";
@@ -149,6 +151,23 @@ static void DetectAndLogMismatchedDoubleQuotes(int argc, char ** argv)
     }
 }
 
+void ParseCommandString(const char * command, int * argc, char ** argv)
+{
+    std::istringstream iss(command);
+    std::vector<std::string> tokens;
+    std::string token;
+    while (std::getline(iss, token, ' '))
+    {
+        tokens.push_back(token);
+    }
+
+    argv[(*argc)++] = kFuzzingModeName;
+    for (std::string & tk : tokens)
+    {
+        argv[*argc] = new char[tk.size() + 1];
+        strcpy(argv[(*argc)++], tk.c_str());
+    }
+}
 } // namespace
 
 void Commands::Register(const char * commandSetName, commands_list commandsList, const char * helpText, bool isCluster)
@@ -183,8 +202,7 @@ exit:
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-int Commands::RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational,
-                             const chip::Optional<char *> & exportDirectory = chip::NullOptional)
+int Commands::RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational)
 {
     std::vector<std::string> arguments;
     VerifyOrReturnValue(DecodeArgumentsFromInteractiveMode(command, arguments), EXIT_FAILURE);
@@ -211,10 +229,24 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
     ChipLogProgress(chipTool, "Command: %s", commandStr.c_str());
     auto err = RunCommand(argc, argv, true, storageDirectory, advertiseOperational);
 
-    if (err == CHIP_NO_ERROR && exportDirectory.HasValue())
+    // Do not delete arg[0]
+    for (auto i = 1; i < argc; i++)
     {
-        LogErrorOnFailure(ExportCommandToFile(command, argv[1], exportDirectory.Value()));
+        delete[] argv[i];
     }
+
+    return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+int Commands::RunFuzzing(const char * command)
+{
+    int argc                                    = 0;
+    char * argv[kFuzzingModeArgumentsMaxLength] = {};
+    ParseCommandString(command, &argc, argv);
+
+    ChipLogProgress(chipTool, "Command: %s", command);
+    auto err = RunCommand(argc, argv, true, chip::NullOptional, false, true);
+
     // Do not delete arg[0]
     for (auto i = 1; i < argc; i++)
     {
@@ -225,7 +257,8 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
 }
 
 CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,
-                                const chip::Optional<char *> & interactiveStorageDirectory, bool interactiveAdvertiseOperational)
+                                const chip::Optional<char *> & interactiveStorageDirectory, bool interactiveAdvertiseOperational,
+                                bool fuzzing)
 {
     Command * command = nullptr;
 
@@ -313,6 +346,10 @@ CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,
 
     if (interactive)
     {
+        if (fuzzing)
+        {
+            return command->RunAsFuzzing(interactiveStorageDirectory);
+        }
         return command->RunAsInteractive(interactiveStorageDirectory, interactiveAdvertiseOperational);
     }
 
@@ -376,39 +413,6 @@ Command * Commands::GetGlobalCommand(CommandsVector & commands, std::string comm
     }
 
     return nullptr;
-}
-
-CHIP_ERROR Commands::ExportCommandToFile(const char * command, const char * commandType, const char * baseDirectory)
-{
-    namespace fs = std::filesystem;
-
-    auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
-
-    // Create seed hash from current timestamp
-    std::hash<std::string> hasher;
-    size_t hashedValue = hasher(std::to_string(now_ms.count()));
-
-    std::string fileName(std::to_string(hashedValue)); // Convert hash to hex string
-
-    fs::path exportDirectory = fs::path(baseDirectory) / commandType;
-    // Insert the command in the file at path "seeds/<command_type>/<hashedValue>"
-    if (!fs::exists(exportDirectory))
-    {
-        VerifyOrReturnError(!fs::create_directories(exportDirectory), CHIP_ERROR_WRITE_FAILED);
-    }
-
-    auto fd = fopen((exportDirectory / fileName).c_str(), "w");
-    VerifyOrReturnError(nullptr != fd, CHIP_ERROR_WRITE_FAILED);
-
-    fwrite(command, sizeof(char), strlen(command), fd);
-
-    auto rv = fclose(fd);
-    VerifyOrReturnError(EOF != rv, CHIP_ERROR_INTERNAL);
-
-    ChipLogProgress(chipTool, "Logged well-formed command: %s", command);
-
-    return CHIP_NO_ERROR;
 }
 
 bool Commands::IsAttributeCommand(std::string commandName) const

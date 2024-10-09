@@ -17,7 +17,6 @@
  */
 
 #include "InteractiveCommands.h"
-
 #include <platform/logging/LogV.h>
 
 #include <editline.h>
@@ -371,9 +370,7 @@ CHIP_ERROR InteractiveStartCommand::RunCommand()
     {
         command = GetCommand(command);
         if (command != nullptr && !ParseCommand(command, &status))
-        {
             break;
-        }
     }
 
     if (command != nullptr)
@@ -399,7 +396,7 @@ bool InteractiveCommand::ParseCommand(char * command, int * status)
 
     ClearLine();
 
-    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising(), mExportDirectory);
+    *status = mHandler->RunInteractive(command, GetStorageDirectory(), NeedsOperationalAdvertising());
 
     return true;
 }

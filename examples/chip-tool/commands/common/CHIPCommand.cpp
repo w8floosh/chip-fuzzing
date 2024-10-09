@@ -108,7 +108,7 @@ CHIP_ERROR GetAttestationRevocationDelegate(const char * revocationSetPath,
 
 CHIP_ERROR CHIPCommand::MaybeSetUpStack()
 {
-    if (IsInteractive())
+    if (IsInteractive() || IsFuzzing())
     {
         return CHIP_NO_ERROR;
     }
@@ -209,7 +209,7 @@ CHIP_ERROR CHIPCommand::MaybeSetUpStack()
 
 void CHIPCommand::MaybeTearDownStack()
 {
-    if (IsInteractive())
+    if (IsInteractive() || IsFuzzing())
     {
         return;
     }
@@ -270,7 +270,7 @@ CHIP_ERROR CHIPCommand::Run()
 
     CHIP_ERROR err = StartWaiting(GetWaitDuration());
 
-    if (IsInteractive())
+    if (IsInteractive() || IsFuzzing())
     {
         bool timedOut;
         // Give it 2 hours to run our cleanup; that should never get hit in practice.
@@ -565,7 +565,7 @@ void CHIPCommand::RunCommandCleanup(intptr_t commandArg)
 void CHIPCommand::CleanupAfterRun()
 {
     assertChipStackLockedByCurrentThread();
-    bool deferCleanup = (IsInteractive() && DeferInteractiveCleanup());
+    bool deferCleanup = ((IsInteractive() || IsFuzzing()) && DeferInteractiveCleanup());
 
     Shutdown();
 
@@ -616,7 +616,7 @@ CHIP_ERROR CHIPCommand::StartWaiting(chip::System::Clock::Timeout duration)
 {
 #if CONFIG_USE_SEPARATE_EVENTLOOP
     // ServiceEvents() calls StartEventLoopTask(), which is paired with the StopEventLoopTask() below.
-    if (!IsInteractive())
+    if (!IsInteractive() && !IsFuzzing())
     {
         ReturnLogErrorOnFailure(DeviceControllerFactory::GetInstance().ServiceEvents());
     }
@@ -638,7 +638,7 @@ CHIP_ERROR CHIPCommand::StartWaiting(chip::System::Clock::Timeout duration)
             mCommandExitStatus = CHIP_ERROR_TIMEOUT;
         }
     }
-    if (!IsInteractive())
+    if (!IsInteractive() && !IsFuzzing())
     {
         LogErrorOnFailure(chip::DeviceLayer::PlatformMgr().StopEventLoopTask());
     }

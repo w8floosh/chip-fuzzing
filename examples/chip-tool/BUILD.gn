@@ -44,7 +44,15 @@ config("config") {
     defines += [ "CONFIG_USE_LOCAL_STORAGE" ]
   }
 
-  cflags = [ "-Wconversion" ]
+  if (config_use_blackbox_fuzzing) {
+    defines += [ "CONFIG_USE_BLACKBOX_FUZZING=${config_use_blackbox_fuzzing}" ]
+  }
+
+  cflags = [
+    "-Wconversion",
+    "-fexceptions",
+    "-Wno-error",
+  ]
 }
 
 static_library("chip-tool-utils") {
@@ -97,6 +105,38 @@ static_library("chip-tool-utils") {
     ]
   }
 
+  if (config_use_blackbox_fuzzing) {
+    sources += [
+      "${chip_root}/src/app/tests/integration/common.cpp",
+      "${chip_root}/src/app/tests/integration/common.h",
+      "commands/fuzzing/AttributeFactory.h",
+      "commands/fuzzing/Commands.h",
+      "commands/fuzzing/DeviceStateManager.cpp",
+      "commands/fuzzing/DeviceStateManager.h",
+      "commands/fuzzing/ForwardDeclarations.h",
+      "commands/fuzzing/Fuzzing.cpp",
+      "commands/fuzzing/Fuzzing.h",
+      "commands/fuzzing/FuzzingCommands.cpp",
+      "commands/fuzzing/FuzzingCommands.h",
+      "commands/fuzzing/Oracle.cpp",
+      "commands/fuzzing/Oracle.h",
+      "commands/fuzzing/Utils.h",
+      "commands/fuzzing/Visitors.cpp",
+      "commands/fuzzing/Visitors.h",
+      "commands/fuzzing/generation/RuntimeGrammarManager.cpp",
+      "commands/fuzzing/generation/RuntimeGrammarManager.h",
+      "commands/fuzzing/generation/Wrappers.cpp",
+      "commands/fuzzing/tlv/DecodedTLVElement.h",
+      "commands/fuzzing/tlv/TLVDataPayloadHelper.cpp",
+      "commands/fuzzing/tlv/TLVDataPayloadHelper.h",
+    ]
+    deps += [
+      "${chip_root}/examples/common/websocket-server",
+      "${chip_root}/src/platform/logging:headers",
+      "${editline_root}:editline",
+    ]
+  }
+
   if (chip_device_platform == "darwin") {
     sources += [ "commands/common/DeviceScanner.cpp" ]
   }
@@ -120,6 +160,9 @@ static_library("chip-tool-utils") {
 
   public_configs = [ ":config" ]
 
+  if (config_use_blackbox_fuzzing) {
+    public_deps += [ "${chip_root}/third_party/yamlcpp" ]
+  }
   if (chip_enable_transport_trace) {
     public_deps +=
         [ "${chip_root}/examples/common/tracing:trace_handlers_decoder" ]
@@ -135,7 +178,6 @@ executable("chip-tool") {
     ":chip-tool-utils",
     "${chip_root}/src/platform/logging:stdio",
   ]
-
   output_dir = root_out_dir
 }
 

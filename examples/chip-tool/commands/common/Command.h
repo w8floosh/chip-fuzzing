@@ -267,6 +267,7 @@ public:
     virtual CHIP_ERROR Run() = 0;
 
     bool IsInteractive() { return mIsInteractive; }
+    bool IsFuzzing() { return mIsFuzzing; }
 
     CHIP_ERROR RunAsInteractive(const chip::Optional<char *> & interactiveStorageDirectory, bool advertiseOperational)
     {
@@ -275,7 +276,13 @@ public:
         mAdvertiseOperational = advertiseOperational;
         return Run();
     }
-
+    CHIP_ERROR RunAsFuzzing(const chip::Optional<char *> & interactiveStorageDirectory)
+    {
+        mStorageDirectory     = interactiveStorageDirectory;
+        mIsFuzzing            = true;
+        mAdvertiseOperational = false;
+        return Run();
+    }
     const chip::Optional<char *> & GetStorageDirectory() const { return mStorageDirectory; }
 
 protected:
@@ -301,6 +308,7 @@ private:
     const char * mName     = nullptr;
     const char * mHelpText = nullptr;
     bool mIsInteractive    = false;
+    bool mIsFuzzing        = false;
 
     chip::Optional<ReadOnlyGlobalCommandArgument> mReadOnlyGlobalCommandArgument;
     std::vector<Argument> mArgs;

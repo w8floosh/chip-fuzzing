@@ -43,8 +43,8 @@ public:
         Register(commandSetName, commandsList, helpText, false);
     }
     int Run(int argc, char ** argv);
-    int RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational,
-                       const chip::Optional<char *> & exportDirectory);
+    int RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational);
+    int RunFuzzing(const char * command);
 
 private:
     struct CommandSet
@@ -59,12 +59,11 @@ private:
 
     CHIP_ERROR RunCommand(int argc, char ** argv, bool interactive = false,
                           const chip::Optional<char *> & interactiveStorageDirectory = chip::NullOptional,
-                          bool interactiveAdvertiseOperational                       = false);
+                          bool interactiveAdvertiseOperational = false, bool fuzzing = false);
 
     CommandSetMap::iterator GetCommandSet(std::string commandSetName);
     Command * GetCommand(CommandsVector & commands, std::string commandName);
     Command * GetGlobalCommand(CommandsVector & commands, std::string commandName, std::string attributeName);
-    CHIP_ERROR ExportCommandToFile(const char * command, const char * commandType, const char * baseDirectory);
     bool IsAttributeCommand(std::string commandName) const;
     bool IsEventCommand(std::string commandName) const;
     bool IsGlobalCommand(std::string commandName) const;

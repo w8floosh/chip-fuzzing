@@ -20,6 +20,7 @@
 
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 
+#include "../fuzzing/Fuzzing.h"
 #include "DataModelLogger.h"
 #include "ModelCommand.h"
 
@@ -34,13 +35,30 @@ public:
     void OnAttributeData(const chip::app::ConcreteDataAttributePath & path, chip::TLV::TLVReader * data,
                          const chip::app::StatusIB & status) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
+            fuzzer->AnalyzeReportData(data, path, status);
+        }
+
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
             LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(path, status));
 
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
-            mError = error;
+            if (IsFuzzing())
+            {
+                using Fuzzer    = chip::fuzzing::Fuzzer;
+                Fuzzer * fuzzer = Fuzzer::GetInstance();
+                fuzzer->AnalyzeReportError(path, status);
+            }
+            else
+            {
+                mError = error;
+            }
             return;
         }
 
@@ -65,6 +83,17 @@ public:
     void OnEventData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
                      const chip::app::StatusIB * status) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
+                fuzzer->AnalyzeReportData(eventHeader, data, status);
+            }
+        }
+
         if (status != nullptr)
         {
             CHIP_ERROR error = status->ToChipError();
@@ -74,6 +103,7 @@ public:
 
                 ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
                 mError = error;
+
                 return;
             }
         }
@@ -98,6 +128,15 @@ public:
 
     void OnError(CHIP_ERROR error) override
     {
+        if (IsFuzzing())
+        {
+            using Fuzzer    = chip::fuzzing::Fuzzer;
+            Fuzzer * fuzzer = Fuzzer::GetInstance();
+            if (fuzzer != nullptr)
+            {
+                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::ReportData, error);
+            }
+        }
         LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
 
         ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
@@ -207,8 +246,7 @@ public:
 
     ReadAttribute(chip::ClusterId clusterId, const char * attributeName, chip::AttributeId attributeId,
                   CredentialIssuerCommands * credsIssuerConfig) :
-        ReadCommand("read", credsIssuerConfig),
-        mClusterIds(1, clusterId), mAttributeIds(1, attributeId)
+        ReadCommand("read", credsIssuerConfig), mClusterIds(1, clusterId), mAttributeIds(1, attributeId)
     {
         AddArgument("attr-name", attributeName);
         AddCommonArguments();
@@ -265,8 +303,7 @@ public:
 
     SubscribeAttribute(chip::ClusterId clusterId, const char * attributeName, chip::AttributeId attributeId,
                        CredentialIssuerCommands * credsIssuerConfig) :
-        SubscribeCommand("subscribe", credsIssuerConfig),
-        mClusterIds(1, clusterId), mAttributeIds(1, attributeId)
+        SubscribeCommand("subscribe", credsIssuerConfig), mClusterIds(1, clusterId), mAttributeIds(1, attributeId)
     {
         AddArgument("attr-name", attributeName);
         AddCommonArguments();
@@ -332,8 +369,7 @@ public:
 
     ReadEvent(chip::ClusterId clusterId, const char * eventName, chip::EventId eventId,
               CredentialIssuerCommands * credsIssuerConfig) :
-        ReadCommand("read-event", credsIssuerConfig),
-        mClusterIds(1, clusterId), mEventIds(1, eventId)
+        ReadCommand("read-event", credsIssuerConfig), mClusterIds(1, clusterId), mEventIds(1, eventId)
     {
         AddArgument("event-name", eventName);
         AddArgument("fabric-filtered", 0, 1, &mFabricFiltered);
@@ -374,8 +410,7 @@ public:
 
     SubscribeEvent(chip::ClusterId clusterId, const char * eventName, chip::EventId eventId,
                    CredentialIssuerCommands * credsIssuerConfig) :
-        SubscribeCommand("subscribe-event", credsIssuerConfig),
-        mClusterIds(1, clusterId), mEventIds(1, eventId)
+        SubscribeCommand("subscribe-event", credsIssuerConfig), mClusterIds(1, clusterId), mEventIds(1, eventId)
     {
         AddArgument("event-name", eventName, "Event name.");
         AddCommonArguments();
