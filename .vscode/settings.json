@@ -159,7 +159,9 @@
         "filesystem": "cpp",
         "*.inc": "cpp",
         "*.def": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "print": "cpp",
+        "shared_mutex": "cpp"
     },
     "[ini]": {
         "editor.formatOnSave": false

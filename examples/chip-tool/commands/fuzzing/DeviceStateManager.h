@@ -53,11 +53,11 @@ public:
         }
         return *this;
     }
-    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality)
+    AttributeState(TLV::TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality)
     {
         mValue = AttributeFactory::Create(aType, bytes, aQuality);
     }
-    AttributeState(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
+    AttributeState(TLV::TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
     {
         mValue = AttributeFactory::Create(aType, std::move(value), bytes, aQuality);
     }
@@ -82,7 +82,7 @@ public:
         return CHIP_NO_ERROR;
     }
 
-    CHIP_ERROR LazyInitialize(TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
+    CHIP_ERROR LazyInitialize(TLV::TLVType aType, uint8_t bytes, AttributeQualityEnum aQuality, AnyType && value)
     {
         mValue = std::move(AttributeFactory::Create(aType, std::move(value), bytes, aQuality));
         VerifyOrReturnError(mValue != nullptr, CHIP_ERROR_INVALID_ARGUMENT);
@@ -210,7 +210,12 @@ public:
     /**
      * @brief Dumps the current device state to a YAML file.
      */
-    CHIP_ERROR Dump(std::vector<std::string> commandHistory = std::vector<std::string>{});
+    CHIP_ERROR Dump(std::vector<CommandHistoryEntry> commandHistory = std::vector<CommandHistoryEntry>{});
+
+    /**
+     * @brief Dumps the result of a command to a YAML file.
+     */
+    CHIP_ERROR Dump(utils::FuzzerObservation observation);
 
     /**
      * @brief Loads a device state snapshot from a YAML file.
@@ -220,7 +225,14 @@ public:
 private:
     DeviceState mDeviceState;
     fs::path mDumpDirectory;
+    // YAML::Emitter mLastSnapshot;
 };
 
+struct CommandHistoryEntry
+{
+    std::string command;
+    CHIP_ERROR statusResponse;
+    OracleStatus oracleStatus;
+};
 } // namespace fuzzing
 } // namespace chip

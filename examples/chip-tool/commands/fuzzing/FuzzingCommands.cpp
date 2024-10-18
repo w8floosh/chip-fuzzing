@@ -1,13 +1,17 @@
 #include "FuzzingCommands.h"
 #include "DeviceStateManager.h"
+#include "Oracle.h"
 #include "Utils.h"
 #include "Visitors.h"
 #include "editline.h"
 #include "generation/RuntimeGrammarManager.h"
+#include <atomic>
 #include <cstring>
+#include <future>
 #include <numeric>
 #include <regex>
 #include <string>
+#include <thread>
 
 namespace fuzz = chip::fuzzing;
 namespace fs   = std::filesystem;
@@ -86,6 +90,7 @@ void ReorderCommandArgs(std::ostringstream & commandArgs)
     {
         tokens.push_back(arg);
     }
+    VerifyOrReturn(tokens.size() == 5);
     std::rotate(tokens.begin(), tokens.begin() + 2, tokens.end());
 
     commandArgs.str("");
@@ -188,38 +193,72 @@ std::string convertHexToDecimal(std::string json)
 }
 } // namespace
 
-void FuzzingCommand::ExecuteCommand(const char * command, int * status)
+void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
 {
-    *status = mHandler->RunFuzzing(command);
+    CHIP_ERROR contextError = CHIP_NO_ERROR;
+    *status                 = mHandler->RunFuzzing(command);
+
+    auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+    contextError        = contextManager->Finalize();
+    if (CHIP_NO_ERROR != contextError)
+    {
+        ChipLogError(chipFuzzer, "Context finalization failure: %s", chip::ErrorStr(contextError));
+    }
+    contextError = contextManager->Close();
+    if (CHIP_NO_ERROR != contextError || contextManager->IsInitialized())
+    {
+        ChipLogError(chipFuzzer, "Could not terminate current fuzzer context gracefully. Forcing close.");
+        VerifyOrDie(CHIP_NO_ERROR == contextManager->Close(true));
+    }
 }
 
-CHIP_ERROR FuzzingStartCommand::AcquireBasicInformation(NodeId nodeId, int * status)
+CHIP_ERROR FuzzingStartCommand::AcquireBasicInformation(NodeId nodeId)
 {
+    CHIP_ERROR status          = CHIP_NO_ERROR;
     std::ostringstream command = std::ostringstream() << "basicinformation read data-model-revision " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     command = std::ostringstream() << "basicinformation read vendor-name " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     command = std::ostringstream() << "basicinformation read vendor-id " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     command = std::ostringstream() << "basicinformation read product-id " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     command = std::ostringstream() << "basicinformation read hardware-version " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     command = std::ostringstream() << "basicinformation read software-version " << nodeId << " 0";
-    ExecuteCommand(command.str().c_str(), status);
-    VerifyOrReturnError(*status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    ExecuteCommand(command.str().c_str(), &status);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     return CHIP_NO_ERROR;
+}
+
+void FuzzingStartCommand::AddOracleRules(NodeId id)
+{
+    fuzz::DeviceStateManager * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+    fuzz::Oracle * oracle                  = fuzz::Fuzzer::GetInstance()->GetOracle();
+    for (auto & endpoint : *deviceState->List(id))
+    {
+        for (auto & cluster : *deviceState->List(id, endpoint.first))
+        {
+            auto acceptedCommandList = std::get<fuzz::ContainerType>(deviceState->ReadAttribute(
+                id, endpoint.first, cluster.first, chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id));
+            for (auto & command : acceptedCommandList)
+            {
+                uint32_t commandId = chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(command);
+                oracle->AddRule(endpoint.first, cluster.first, commandId);
+            }
+        }
+    }
 }
 
 /**
@@ -238,7 +277,7 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
 {
     // Access to the device state manager is required to add the new node and list the endpoints.
     fuzz::DeviceStateManager * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
-    int status                             = 0;
+    CHIP_ERROR status                      = CHIP_NO_ERROR;
     deviceState->Add(id);
 
     /**
@@ -252,17 +291,17 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
     std::string retrieveEndpointsCommand = GetRetrieveEndpointsCommand(id);
 
     ExecuteCommand(retrieveEndpointsCommand.c_str(), &status);
-    VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
     VerifyOrReturnError(deviceState->List(id) != nullptr, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
     for (auto & endpoint : *deviceState->List(id))
     {
         std::string retrieveDeviceTypeCommand     = GetRetrieveDeviceTypeCommand(id, endpoint.first);
         std::string retrieveServerClustersCommand = GetRetrieveServerClustersCommand(id, endpoint.first);
         ExecuteCommand(retrieveDeviceTypeCommand.c_str(), &status);
-        VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+        VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
         ExecuteCommand(retrieveServerClustersCommand.c_str(), &status);
-        VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+        VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
         VerifyOrReturnError(deviceState->List(id, endpoint.first) != nullptr, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
         for (auto & cluster : *deviceState->List(id, endpoint.first))
@@ -272,9 +311,9 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
                 GetSubscribeAllClusterAttributesCommand(id, endpoint.first, cluster.first);
 
             ExecuteCommand(readAllClusterAttributesCommand.c_str(), &status);
-            VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
             ExecuteCommand(subscribeAllClusterAttributesCommand.c_str(), &status);
-            VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+            VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
             VerifyOrReturnError(deviceState->List(id, endpoint.first, cluster.first) != nullptr,
                                 CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
@@ -290,7 +329,7 @@ FuzzingStartCommand::AcquireRemoteDataModel(NodeId id)
                     id, endpoint.first, cluster.first, chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(event));
 
                 ExecuteCommand(subscribeClusterEventCommand.c_str(), &status);
-                VerifyOrReturnError(status == EXIT_SUCCESS, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+                VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
             }
         }
     }
@@ -305,14 +344,14 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
     mSeedDirectory = fs::path(mSeedDirectoryArgument);
     if (!fs::exists(mSeedDirectory))
     {
-        VerifyOrReturnError(fs::create_directory(mSeedDirectory), CHIP_FUZZER_FILESYSTEM_ERROR);
+        VerifyOrReturnError(fs::create_directory(mSeedDirectory), CHIP_FUZZER_ERROR_SYSTEM_IO);
     }
 
     if (mOutputDirectoryArgument.HasValue())
     {
         mStatefulFuzzingEnabled = true;
         mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument.Value()));
-        VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_FILESYSTEM_ERROR);
+        VerifyOrReturnError(fs::exists(mOutputDirectory.Value()), CHIP_FUZZER_ERROR_SYSTEM_IO);
         fuzz::Fuzzer::Initialize(mDestinationId, mSeedDirectory, kGenerationFunc,
                                  fs::path("out/debug/standalone/chip-fuzzer/statedumps"), mOutputDirectory.Value());
     }
@@ -324,7 +363,7 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
 
     kGenerationFunc = nullptr;
 
-    VerifyOrReturnError(fuzz::Fuzzer::GetInstance() != nullptr, CHIP_FUZZER_ERROR_INITIALIZATION_FAILED);
+    VerifyOrReturnError(fuzz::Fuzzer::GetInstance() != nullptr, CHIP_FUZZER_ERROR_CORE_INITIALIZATION_FAILED);
     return CHIP_NO_ERROR;
 }
 
@@ -333,58 +372,81 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     CHIP_ERROR err = InitializeFuzzer();
     VerifyOrReturnError(CHIP_NO_ERROR == err, err);
     VerifyOrReturnError(CHIP_NO_ERROR == AcquireRemoteDataModel(mDestinationId), CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
+    AddOracleRules(mDestinationId);
+
     auto fuzzer             = fuzz::Fuzzer::GetInstance();
     auto deviceStateManager = fuzzer->GetDeviceStateManager();
-    int status              = 0;
+    CHIP_ERROR status       = CHIP_NO_ERROR;
+    CHIP_ERROR finalStatus  = CHIP_NO_ERROR;
 
-    // Read the first line of each file in "out/testcases" and send it as a command
     auto * endpointList = deviceStateManager->List(mDestinationId);
-    VerifyOrReturnError(endpointList && CHIP_NO_ERROR == AcquireBasicInformation(mDestinationId, &status),
+    VerifyOrReturnError(endpointList && CHIP_NO_ERROR == AcquireBasicInformation(mDestinationId),
                         CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-    std::string testcasesDirectory          = "out/debug/standalone/chip-fuzzer/testcases";
-    std::string generatedGrammarsDirectory  = "out/debug/standalone/chip-fuzzer/grammars";
+    fs::path generatedGrammarsDirectory     = "out/debug/standalone/chip-fuzzer/grammars";
     const fuzz::BasicInformation * nodeInfo = deviceStateManager->GetNodeInformation(mDestinationId);
-    fuzz::generation::RuntimeGrammarManager grammarManager(nodeInfo, generatedGrammarsDirectory);
+    fuzz::generation::RuntimeGrammarManager grammarManager(nodeInfo, generatedGrammarsDirectory.string());
     grammarManager.CreateGrammar(deviceStateManager, mDestinationId);
-    grammarManager.GenerateTestCases(testcasesDirectory, mIterations.Value());
-
-    fs::directory_iterator endIterator;
-    for (fs::directory_iterator iter(testcasesDirectory); iter != endIterator; ++iter)
+    fs::path testcasesFile = generatedGrammarsDirectory / grammarManager.mGrammarId / "tests.txt";
+    if (!fs::exists(testcasesFile))
     {
-        if (fs::is_regular_file(iter->status()))
+        grammarManager.GenerateTestCases(testcasesFile, mIterations.Value(), 18);
+    }
+
+    std::ifstream file(testcasesFile);
+    /**
+     * Strings generated by Grammarinator come with the form ENDPOINT CLUSTER COMMAND JSON.
+     * To fit the generated content into a command, we must append it to the command-by-id begin string and the node ID,
+     * then rotate the tokens of the string by 2 positions to match the desired format by the chip-tool.
+     * any command-by-id
+     */
+    std::string generatedArgs;
+
+    // std::atomic<uint32_t> testIndex(1);
+    const auto startTime = std::chrono::steady_clock::now();
+    // std::atomic<bool> running(true);
+    // auto statusPrintFuture = std::async(std::launch::async, fuzz::PrintStatusLine, std::ref(running), startTime,
+    //                                     std::ref(testIndex), mIterations.Value(), status, fuzzer->mOracle->GetCurrentStatus());
+
+    while (std::getline(file, generatedArgs))
+    {
+        std::ostringstream command;
+        std::ostringstream commandArgs;
+        // fuzz::PrintStatusLine(startTime, testIndex, mIterations.Value(), status, fuzzer->mOracle->GetCurrentStatus());
+        commandArgs << mDestinationId << " " << convertHexToDecimal(generatedArgs);
+        ReorderCommandArgs(commandArgs);
+
+        std::string reorderedCommandArgs = commandArgs.str();
+        // reorderedCommandArgs.pop_back(); // Remove the last space
+        command << "any command-by-id " << reorderedCommandArgs;
+
+        ExecuteCommand(command.str().c_str(), &status);
+        fuzzer->AppendToHistory(command.str().c_str(), status);
+
+        if (fuzzer->GetOracle()->GetCurrentStatus() == fuzz::OracleStatus::UNREACHABLE)
         {
-            std::ifstream file(iter->path());
-            if (file.is_open())
-            {
-                /**
-                 * Strings generated by Grammarinator come with the form ENDPOINT CLUSTER COMMAND JSON.
-                 * To fit the generated content into a command, we must append it to the command-by-id begin string and the node ID,
-                 * then rotate the tokens of the string by 2 positions to match the desired format by the chip-tool.
-                 * any command-by-id
-                 */
-                std::string generatedArgs;
-                std::getline(file, generatedArgs);
-                file.close();
-
-                std::ostringstream command;
-                std::ostringstream commandArgs;
-
-                commandArgs << mDestinationId << " " << convertHexToDecimal(generatedArgs);
-                ReorderCommandArgs(commandArgs);
-
-                std::string reorderedCommandArgs = commandArgs.str();
-                // reorderedCommandArgs.pop_back(); // Remove the last space
-                command << "any command-by-id " << reorderedCommandArgs;
-
-                ExecuteCommand(command.str().c_str(), &status);
-                fuzzer->AppendToHistory(command.str().c_str());
-                // Handle the status as needed
-            }
+            ChipLogError(chipFuzzer, "The node is unreachable or may have crashed.");
+            finalStatus = CHIP_ERROR_UNEXPECTED_EVENT;
         }
+        // ++testIndex;
+    }
+    // running = false;
+    // statusPrintFuture.wait();
+
+    // Clear the terminal
+    std::cout << "\033[2J\033[1;1H";
+
+    if (finalStatus == CHIP_NO_ERROR)
+    {
+        ChipLogProgress(chipFuzzer, "Fuzzing completed in %s.", fuzz::GetElapsedTime(startTime).c_str());
+    }
+    else
+    {
+        ChipLogError(chipFuzzer, "The fuzzer lost connection with the device. Please check the command history logs.");
     }
 
     fuzzer->GetDeviceStateManager()->Dump(fuzzer->mCommandHistory);
+    ChipLogProgress(chipFuzzer, "The device state and command history were dumped in the statedumps folder.");
 
     SetCommandExitStatus(CHIP_NO_ERROR);
     return CHIP_NO_ERROR;

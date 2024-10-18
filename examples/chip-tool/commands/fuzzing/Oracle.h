@@ -2,6 +2,7 @@
 #include "ForwardDeclarations.h"
 #include "Utils.h"
 
+using IMStatus = chip::Protocols::InteractionModel::Status;
 namespace chip {
 namespace fuzzing {
 
@@ -10,22 +11,18 @@ namespace fuzzing {
  * @brief The OracleStatus enum represents the possible outcomes of the bug oracle's analysis.
  * The oracle status gives an insight into what went wrong with the device's behavior.
  */
-enum OracleStatus
+enum class OracleStatus : uint8_t
 // TODO: Create error description logs depending on the status
 {
-    OK,                    // Received status and value match the expected ones
-    UNEXPECTED_TRANSITION, // Received value doesn't match with expected one
-    UNEXPECTED_RESPONSE,   // Received status doesn't match with expected one
-    UNEXPECTED_BEHAVIOR,   // Neither received value or status match expected ones
-    DATA_MODEL_VIOLATION,  // Received information which violates the Matter standard
-    // UNRECOGNIZED_PATH,     // Received data which isn't on a standard path
-    OUT_OF_MEMORY, // The device is out of memory
-    BUSY,          // The device is unresponsive or busy
+    OK,                  // Observed status matches the expected one
+    UNEXPECTED_RESPONSE, // Observed status doesn't match with expected one
+    TIMEOUT,       // The device is either unresponsive or busy. Oracle transitions to this state when the device timeouts once
+    UNREACHABLE,   // The device likely may have crashed. Oracle transitions to this state when the device timeouts while the oracle
+                   // status is TIMEOUT
     INITIALIZED,   // Initial current status: the oracle hasn't received any data yet
     UNINITIALIZED, // Initial last status: the oracle hasn't received any data yet
 };
 
-// TODO: Find some standard way to represent specification rules (conformance?)
 /**
  * @class OracleRule
  * @brief The OracleRule struct represents a rule that the device's behavior must follow.
@@ -34,19 +31,91 @@ enum OracleStatus
 class OracleRule
 {
 public:
-    OracleRule(chip::app::ConcreteDataAttributePath dmPath, const chip::Protocols::InteractionModel::Status & expectedStatus) :
-        mAttributePath(dmPath), mExpectedStatus(expectedStatus) {};
+    struct ExtraArgs
+    {
+        std::optional<std::unordered_map<uint8_t, TLV::TLVType>> requiredCommandFields;
+        std::optional<std::array<int64_t, 2>> constraintLimits;
+    };
+
+    OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command) :
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::nullopt)
+    {
+        mExpectedStatuses.push_back(IMStatus::Success);
+        mExpectedStatuses.push_back(IMStatus::Failure);
+        mExpectedStatuses.push_back(IMStatus::InvalidCommand);
+        mExpectedStatuses.push_back(IMStatus::ConstraintError);
+    };
+
+    OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command, ExtraArgs && extraArgs) :
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::move(extraArgs))
+    {
+        mExpectedStatuses.push_back(IMStatus::InvalidCommand);
+        mExpectedStatuses.push_back(IMStatus::ConstraintError);
+        mExpectedStatuses.push_back(IMStatus::Success);
+        mExpectedStatuses.push_back(IMStatus::Failure);
+    };
+
+    OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+               std::vector<IMStatus> && expectedStatuses) :
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(attribute), mIsCommand(false), mExtraArgs(std::nullopt),
+        mExpectedStatuses(std::move(expectedStatuses))
+    {
+        mExpectedStatuses.push_back(IMStatus::Success);
+        mExpectedStatuses.push_back(IMStatus::Failure);
+    };
 
     OracleRule & operator=(const OracleRule &) = default;
 
-    bool Query(const chip::Protocols::InteractionModel::Status & receivedStatus, const std::optional<AttributeState> & value) const
+    /** Checks if the observed status matches at least one of the expected ones. */
+    bool Query(const IMStatus & receivedStatus) const
     {
-        return receivedStatus == mExpectedStatus;
+        VerifyOrReturnValue(mEndpointId != kInvalidEndpointId && mClusterId != kInvalidClusterId && mSubjectId != kInvalidCommandId,
+                            false);
+        for (const auto & status : mExpectedStatuses)
+            if (status == receivedStatus)
+                return true;
+        return false;
     }
 
+    /** TODO: Checks if the observed status matches at least one of the expected ones and the supplied payload respects all the
+     * constraints. */
+    // bool Query(const IMStatus & receivedStatus, Json::Value payload) const
+    // {
+    //     VerifyOrReturnValue(mEndpointId != kInvalidEndpointId && mClusterId != kInvalidClusterId && mSubjectId !=
+    //     kInvalidCommandId,
+    //                         false);
+    //     if (mExtraArgs.has_value())
+    //     {
+    //         if (mExtraArgs->requiredCommandFields.has_value())
+    //         {
+    //             for (const auto & [fieldId, fieldType] : mExtraArgs->requiredCommandFields.value())
+    //             {
+    //                 if (payload[fieldId] != fieldType)
+    //                     return false;
+    //             }
+    //         }
+    //         if (mExtraArgs->constraintLimits.has_value())
+    //         {
+    //             auto [min, max] = mExtraArgs->constraintLimits.value();
+    //             for (const auto & [fieldId, fieldType] : mExtraArgs->requiredCommandFields.value())
+    //             {
+    //                 if (payload[fieldId].type() != fieldType)
+    //                     return false;
+    //                 if (payload[fieldId].asInt64() < min || payload[fieldId].asInt64() > max)
+    //                     return false;
+    //             }
+    //         }
+    //     }
+    //     return Query(receivedStatus);
+    // }
+
 private:
-    const chip::app::ConcreteDataAttributePath mAttributePath;
-    const chip::Protocols::InteractionModel::Status & mExpectedStatus;
+    const chip::EndpointId mEndpointId;
+    const chip::ClusterId mClusterId;
+    const uint32_t mSubjectId;
+    const bool mIsCommand;
+    const std::optional<ExtraArgs> mExtraArgs;
+    std::vector<IMStatus> mExpectedStatuses;
 };
 
 /**
@@ -62,57 +131,39 @@ private:
  *
  * - `queryResult`: indicates if the rule was fulfilled or not (i.e. the query result).
  *
- * - `status`: Represents the OracleStatus the oracle transitioned to.
+ * - `statusResult`: Represents the OracleStatus the oracle should transition to.
  */
 struct OracleResult
 {
-    OracleResult(int id, const OracleRule & rule) : invalidIdIndex(id), usedRule(rule) {}
+    OracleResult(const OracleRule & rule, IMStatus observed) : usedRule(rule), queryResult(rule.Query(observed))
+    {
+        if (!queryResult)
+            statusResult = OracleStatus::UNEXPECTED_RESPONSE;
+    }
+    OracleResult(const OracleRule & rule, bool result) : usedRule(rule), queryResult(result) {}
     OracleResult & operator=(OracleResult &) = default;
-    int invalidIdIndex;
     const OracleRule & usedRule;
     bool queryResult;
+    OracleStatus statusResult = OracleStatus::OK;
 };
 
 class OracleRuleMap
 {
-    using key_t = std::tuple<chip::ClusterId, chip::AttributeId>;
+    using key_t = std::tuple<chip::EndpointId, chip::ClusterId, uint32_t, bool>;
 
 public:
-    OracleResult Query(const chip::app::ConcreteDataAttributePath & path,
-                       const chip::Protocols::InteractionModel::Status & receivedStatus);
-    void Add(chip::app::ConcreteDataAttributePath path, const chip::Protocols::InteractionModel::Status & expectedStatus);
-
-    static const OracleRule kInvalidClusterOracleRule;
-    static const OracleRule kInvalidAttributeOracleRule;
+    const OracleResult Query(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject, bool isCommand,
+                             const IMStatus & receivedStatus);
+    void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command);
+    void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+             std::vector<IMStatus> && expectedStatuses);
 
 private:
-    struct PathHash
-    {
-        PathHash() : clusterHasher(), attributeHasher() {}
-        std::hash<uint32_t> clusterHasher;
-        std::hash<uint32_t> attributeHasher;
-        std::size_t operator()(const key_t & k) const { return clusterHasher(std::get<0>(k)) ^ attributeHasher(std::get<1>(k)); }
-    };
+    std::unordered_map<utils::OracleRuleMapKey, OracleRule, utils::MapKeyHasher, utils::MapKeyEqualizer> mRuleMap;
 
-    struct PathEqual
-    {
-        bool operator()(const key_t & v0, const key_t & v1) const
-        {
-            return (std::get<0>(v0) == std::get<0>(v1) && std::get<1>(v0) == std::get<1>(v1));
-        }
-    };
-
-    std::unordered_map<key_t, OracleRule, PathHash, PathEqual> mMap;
-    std::unordered_map<chip::ClusterId, uint64_t> mNoRulesForCluster;
-    std::unordered_map<chip::AttributeId, uint64_t> mNoRulesForAttribute;
+    static const OracleRule mInvalidRule;
 };
 
-const OracleRule kInvalidClusterOracleRule{ chip::app::ConcreteDataAttributePath(kInvalidEndpointId, kInvalidClusterId,
-                                                                                 kInvalidAttributeId),
-                                            chip::Protocols::InteractionModel::Status::UnsupportedCluster };
-const OracleRule kInvalidAttributeOracleRule{ chip::app::ConcreteDataAttributePath(kInvalidEndpointId, kInvalidClusterId,
-                                                                                   kInvalidAttributeId),
-                                              chip::Protocols::InteractionModel::Status::UnsupportedAttribute };
 /**
  * @class Oracle
  * @brief The bug oracle checks if the received response status/error was expected or not.
@@ -126,9 +177,20 @@ public:
     Oracle() : mCurrentStatus(OracleStatus::INITIALIZED), mLastStatus(OracleStatus::UNINITIALIZED) {};
     ~Oracle() {};
 
-    // TODO: Edit signature to take AttributeDataIB/AttributeStatusIB as parameter too
-    OracleStatus & Consume(const CHIP_ERROR & actual, const CHIP_ERROR & expected);
-    OracleStatus & Consume(const chip::app::StatusIB & actual, chip::app::StatusIB & expected);
+    const OracleStatus & Consume(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject, bool isCommand,
+                                 const IMStatus & observed,
+                                 const chip::Optional<ClusterStatus> & observedClusterSpecific = chip::NullOptional);
+    const OracleStatus & GetCurrentStatus() { return mCurrentStatus; };
+    const OracleStatus & GetLastStatus() { return mLastStatus; };
+    void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command)
+    {
+        mRuleMap.Add(endpoint, cluster, command);
+    }
+    void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+                 std::vector<IMStatus> && expectedStatuses)
+    {
+        mRuleMap.Add(endpoint, cluster, attribute, std::move(expectedStatuses));
+    }
 
 private:
     OracleStatus mCurrentStatus;

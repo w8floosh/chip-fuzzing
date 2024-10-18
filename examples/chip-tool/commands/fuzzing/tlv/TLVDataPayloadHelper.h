@@ -63,6 +63,8 @@ public:
         PrettyPrint();
     }
 
+    static void PrintRaw(const uint8_t * data, size_t length);
+
 private:
     chip::TLV::TLVReader mPayloadReader;
     chip::TLV::TLVWriter mPayloadWriter;

@@ -1,45 +1,54 @@
 #include "Oracle.h"
+#include "Utils.h"
 namespace fuzz = chip::fuzzing;
 
-fuzz::OracleStatus & fuzz::Oracle::Consume(const chip::app::StatusIB & actual, chip::app::StatusIB & expected)
+const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject,
+                                                 bool isCommand, const IMStatus & observed,
+                                                 const chip::Optional<ClusterStatus> & observedClusterSpecific)
 {
-    return Consume(actual.ToChipError(), expected.ToChipError());
-}
-
-fuzz::OracleStatus & fuzz::Oracle::Consume(const CHIP_ERROR & actual, const CHIP_ERROR & expected)
-{
-    // TODO
     mLastStatus = mCurrentStatus;
-
-    if (actual == expected)
+    if (observedClusterSpecific != chip::NullOptional)
     {
-        mCurrentStatus = OracleStatus::OK;
+        // TODO: Implement cluster-specific status handling
+        return mCurrentStatus;
     }
-    else
+    if (observed == IMStatus::Timeout)
     {
-        if (mLastStatus == OracleStatus::OK)
-        {
-            mCurrentStatus = OracleStatus::UNEXPECTED_RESPONSE;
-        }
+        if (mLastStatus == OracleStatus::TIMEOUT)
+            // Device may have crashed
+            mCurrentStatus = OracleStatus::UNREACHABLE;
         else
-        {
-            mCurrentStatus = OracleStatus::UNEXPECTED_BEHAVIOR;
-        }
-    }
-    return mCurrentStatus;
-} // namespace chip::fuzzing
+            mCurrentStatus = OracleStatus::TIMEOUT;
 
-fuzz::OracleResult fuzz::OracleRuleMap::Query(const chip::app::ConcreteDataAttributePath & path,
-                                              const chip::Protocols::InteractionModel::Status & receivedStatus)
-{
-    return OracleResult(0, OracleRuleMap::kInvalidClusterOracleRule);
+        return mCurrentStatus;
+    }
+
+    OracleResult result = mRuleMap.Query(endpoint, cluster, subject, isCommand, observed);
+    mCurrentStatus      = result.statusResult;
+    return mCurrentStatus;
 }
 
-void fuzz::OracleRuleMap::Add(chip::app::ConcreteDataAttributePath path,
-                              const chip::Protocols::InteractionModel::Status & expectedStatus)
+const fuzz::OracleRule fuzz::OracleRuleMap::mInvalidRule = OracleRule(kInvalidEndpointId, kInvalidClusterId, kInvalidCommandId);
+
+const fuzz::OracleResult fuzz::OracleRuleMap::Query(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject,
+                                                    bool isCommand, const IMStatus & receivedStatus)
 {
-    auto key = std::make_tuple(path.mClusterId, path.mAttributeId);
-    mMap.emplace(key, OracleRule(path, expectedStatus));
-    mNoRulesForCluster[std::get<0>(key)]++;
-    mNoRulesForAttribute[std::get<1>(key)]++;
+    key_t key(endpoint, cluster, subject, isCommand);
+    auto rule = mRuleMap.find(key);
+    VerifyOrReturnValue(rule != mRuleMap.end(), OracleResult(mInvalidRule, false));
+    return OracleResult(rule->second, receivedStatus);
+}
+
+void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command)
+{
+    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && command != kInvalidCommandId);
+    key_t key(endpoint, cluster, command, true);
+    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command)).second);
+}
+void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+                              std::vector<IMStatus> && expectedStatuses)
+{
+    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && attribute != kInvalidAttributeId);
+    key_t key(endpoint, cluster, attribute, false);
+    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, attribute, std::move(expectedStatuses))).second);
 }

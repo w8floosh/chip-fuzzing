@@ -113,7 +113,7 @@ private:
         }
         else
         {
-            Indent(indent);
+            fuzz::Indent(indent);
             std::cout << "}" << std::endl;
         }
     }
@@ -121,7 +121,7 @@ private:
     void PrintDecodedElementMetadata(std::shared_ptr<DecodedTLVElement> element, size_t indent = 0)
     {
         VerifyOrDie(element != nullptr);
-        Indent(indent);
+        fuzz::Indent(indent);
         std::cout << "[Type: 0x" << std::hex << static_cast<int16_t>(element->type) << std::dec
                   << ", Byte size: " << static_cast<uint16_t>(element->length) << ", Tag: 0x" << std::hex
                   << static_cast<int16_t>(element->tag) << " (" << std::dec
