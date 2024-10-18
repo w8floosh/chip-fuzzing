@@ -17,7 +17,7 @@ public:
 
     /////////// CHIPCommand Interface /////////
     chip::System::Clock::Timeout GetWaitDuration() const override { return chip::System::Clock::Seconds16(0); }
-    void ExecuteCommand(const char * command, int * status);
+    void ExecuteCommand(const char * command, CHIP_ERROR * status);
     virtual CHIP_ERROR RunCommand() override = 0;
 
 private:
@@ -63,6 +63,7 @@ private:
     CHIP_ERROR InitializeFuzzer();
 
     CHIP_ERROR AcquireRemoteDataModel(chip::NodeId node);
-    CHIP_ERROR AcquireBasicInformation(chip::NodeId, int * status);
+    CHIP_ERROR AcquireBasicInformation(chip::NodeId node);
+    void AddOracleRules(chip::NodeId node);
     const char * GenerateCommand(chip::ClusterId cluster);
 };

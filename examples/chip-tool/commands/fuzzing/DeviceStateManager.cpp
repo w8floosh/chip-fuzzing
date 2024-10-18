@@ -298,7 +298,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
  * Dumping the device state is a costly operation, as the function traverses and copies the whole device state inside a std::map to
  * dump the keys in ascending order.
  */
-CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistory)
+CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> commandHistory)
 {
     // TODO: Add dumping for events and events history
     auto now    = std::chrono::system_clock::now();
@@ -384,9 +384,14 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistor
     if (commandHistory.size() != 0)
     {
         emitter << YAML::Key << "history" << YAML::Value << YAML::BeginSeq;
-        for (const auto & command : commandHistory)
+        for (const auto & entry : commandHistory)
         {
-            emitter << YAML::Value << command;
+            emitter << YAML::BeginMap;
+            emitter << YAML::Key << "command" << YAML::Value << entry.command;
+            emitter << YAML::Key << "statusResponse" << YAML::Value << YAML::Hex << entry.statusResponse.AsInteger();
+            emitter << YAML::Key << "oracleStatus" << YAML::Value << YAML::Hex << static_cast<uint8_t>(entry.oracleStatus)
+                    << YAML::Dec;
+            emitter << YAML::EndMap;
         }
         emitter << YAML::EndSeq;
     }

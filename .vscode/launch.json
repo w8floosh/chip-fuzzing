@@ -423,9 +423,12 @@
                 "seed-only",
                 "seeds",
                 "--iterations",
-                "2000"
+                "1000"
             ],
-            "env": {"CONDA_PREFIX": "${env:HOME}/.conda/envs/matter", "PATH": "${env:PATH}"},
+            "env": {
+                "CONDA_PREFIX": "${env:HOME}/.conda/envs/matter",
+                "PATH": "${env:PATH}"
+            },
             "cwd": "${workspaceFolder}",
             "breakpointMode": "path"
             // "stdio": [

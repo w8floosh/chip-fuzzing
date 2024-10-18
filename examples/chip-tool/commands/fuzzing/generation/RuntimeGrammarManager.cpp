@@ -153,27 +153,20 @@ bool gen::RuntimeGrammarManager::IsGrammarinatorInstalled()
     return std::system(command.c_str()) == 0;
 }
 
-void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outDir, size_t numCases, uint16_t maxDepth)
+void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outFile, size_t numCases, uint16_t maxDepth)
 {
     VerifyOrDieWithMsg(std::filesystem::exists(mGeneratedLexerPath), chipFuzzer, "Lexer file not found.");
     VerifyOrDieWithMsg(std::filesystem::exists(mGeneratedParserPath), chipFuzzer, "Parser file not found.");
 
-    if (!std::filesystem::exists(outDir))
-    {
-        if (!std::filesystem::exists(outDir.parent_path()))
-            VerifyOrDieWithMsg(std::filesystem::create_directories(outDir), chipFuzzer, "Failed to create output directory.");
-        else
-            VerifyOrDieWithMsg(std::filesystem::create_directory(outDir), chipFuzzer, "Failed to create output directory.");
-    }
-    std::ostringstream command(mPythonExecutable, std::ios_base::ate);
+    std::ostringstream command("PYTHONUNBUFFERED=1 " + mPythonExecutable, std::ios_base::ate);
 
     std::string grammarinatorGenerateFile = std::string(mEnvPrefix + "/bin/grammarinator-generate");
     std::string baseLexerFilename         = mBaseLexerPath.string();
     std::string generatedLexerFilename    = mGeneratedLexerPath.string();
     std::string generatorClassName        = std::string(mGeneratedLexerPath.parent_path().filename().string() + "_Generator." +
                                                         mGeneratedLexerPath.parent_path().filename().string() + "_Generator");
-    command << " " << grammarinatorGenerateFile << " " << generatorClassName << " -o " << outDir.string() << "/test_%d -d "
-            << maxDepth << " -n " << numCases << " --sys-path " << mGeneratedLexerPath.parent_path().string();
+    command << " " << grammarinatorGenerateFile << " " << generatorClassName << " -d " << maxDepth << " -n " << numCases
+            << " --stdout --sys-path " << mGeneratedLexerPath.parent_path().string() << " > " << outFile.string();
 
     ChipLogProgress(chipFuzzer, "Generating test cases...");
     VerifyOrDieWithMsg(std::system(command.str().c_str()) == 0, chipFuzzer, "Failed to generate test cases.");

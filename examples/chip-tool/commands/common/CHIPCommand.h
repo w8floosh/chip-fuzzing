@@ -22,9 +22,13 @@
 #include <controller/ExamplePersistentStorage.h>
 #endif // CONFIG_USE_LOCAL_STORAGE
 
-#include "Command.h"
+#if CONFIG_USE_BLACKBOX_FUZZING
+#include "../fuzzing/ForwardDeclarations.h"
+#include "../fuzzing/Fuzzing.h"
+#endif // CONFIG_USE_BLACKBOX_FUZZING
 
 #include "BDXDiagnosticLogsServerDelegate.h"
+#include "Command.h"
 
 #include <TracingCommandLineArgument.h>
 #include <app/icd/client/CheckInHandler.h>
@@ -259,6 +263,7 @@ private:
     std::condition_variable cvWaitingForResponse;
     std::mutex cvWaitingForResponseMutex;
     bool mWaitingForResponse{ true };
+    bool mWaitingForSubscriptionData{ false };
 #endif // CONFIG_USE_SEPARATE_EVENTLOOP
 
     void StartTracing();

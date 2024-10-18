@@ -18,12 +18,15 @@
 
 #pragma once
 
+#if CONFIG_USE_BLACKBOX_FUZZING
+#include "../fuzzing/ForwardDeclarations.h"
 #include "../fuzzing/Fuzzing.h"
+#endif // CONFIG_USE_BLACKBOX_FUZZING
 #include "DataModelLogger.h"
 #include "ModelCommand.h"
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 #include <lib/core/ClusterEnums.h>
-
+#include <thread>
 class ClusterCommand : public InteractionModelCommands, public ModelCommand, public chip::app::CommandSender::Callback
 {
 public:
@@ -46,6 +49,15 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+#if CONFIG_USE_SEPARATE_EVENTLOOP
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(
+                device->GetDeviceId(), chip::app::ConcreteCommandPath{ endpointIds.at(0), mClusterId, mCommandId }, &mError));
+            ChipLogProgress(chipFuzzer, "Sending cluster command...");
+#endif // CONFIG_USE_SEPARATE_EVENTLOOP
+        }
         return InteractionModelCommands::SendCommand(device, endpointIds.at(0), mClusterId, mCommandId, mPayload);
     }
 
@@ -53,6 +65,16 @@ public:
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, chip::EndpointId endpointId, chip::ClusterId clusterId,
                            chip::CommandId commandId, const T & value)
     {
+        if (IsFuzzing())
+        {
+#if CONFIG_USE_SEPARATE_EVENTLOOP
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(
+                device->GetDeviceId(), chip::app::ConcreteCommandPath{ endpointId, clusterId, commandId }, &mError));
+            ChipLogProgress(chipFuzzer, "Sending cluster command...");
+
+#endif // CONFIG_USE_SEPARATE_EVENTLOOP
+        }
         return InteractionModelCommands::SendCommand(device, endpointId, clusterId, commandId, value);
     }
 
@@ -60,6 +82,16 @@ public:
                            chip::CommandId commandId,
                            const chip::app::Clusters::IcdManagement::Commands::UnregisterClient::Type & value)
     {
+        if (IsFuzzing())
+        {
+#if CONFIG_USE_SEPARATE_EVENTLOOP
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(
+                device->GetDeviceId(), chip::app::ConcreteCommandPath{ endpointId, clusterId, commandId }, &mError));
+            ChipLogProgress(chipFuzzer, "Sending cluster command...");
+
+#endif // CONFIG_USE_SEPARATE_EVENTLOOP
+        }
         ReturnErrorOnFailure(InteractionModelCommands::SendCommand(device, endpointId, clusterId, commandId, value));
         mScopedNodeId = chip::ScopedNodeId(value.checkInNodeID, device->GetSecureSession().Value()->GetFabricIndex());
         return CHIP_NO_ERROR;
@@ -69,6 +101,16 @@ public:
                            chip::CommandId commandId,
                            const chip::app::Clusters::IcdManagement::Commands::RegisterClient::Type & value)
     {
+        if (IsFuzzing())
+        {
+#if CONFIG_USE_SEPARATE_EVENTLOOP
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(
+                device->GetDeviceId(), chip::app::ConcreteCommandPath{ endpointId, clusterId, commandId }, &mError));
+            ChipLogProgress(chipFuzzer, "Sending cluster command...");
+
+#endif // CONFIG_USE_SEPARATE_EVENTLOOP
+        }
         ReturnErrorOnFailure(InteractionModelCommands::SendCommand(device, endpointId, clusterId, commandId, value));
         mScopedNodeId     = chip::ScopedNodeId(value.checkInNodeID, device->GetSecureSession().Value()->GetFabricIndex());
         mMonitoredSubject = value.monitoredSubject;
@@ -81,6 +123,16 @@ public:
                            chip::CommandId commandId,
                            const chip::app::Clusters::DiagnosticLogs::Commands::RetrieveLogsRequest::Type & value)
     {
+        if (IsFuzzing())
+        {
+#if CONFIG_USE_SEPARATE_EVENTLOOP
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(
+                device->GetDeviceId(), chip::app::ConcreteCommandPath{ endpointId, clusterId, commandId }, &mError));
+            ChipLogProgress(chipFuzzer, "Sending cluster command...");
+
+#endif // CONFIG_USE_SEPARATE_EVENTLOOP
+        }
         ReturnErrorOnFailure(InteractionModelCommands::SendCommand(device, endpointId, clusterId, commandId, value));
 
         if (value.transferFileDesignator.HasValue() &&
@@ -111,17 +163,16 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeCommandResponse(data, path, status);
-            }
+            auto fuzzer = fuzz::Fuzzer::GetInstance();
+            fuzzer->GetCallbackInterceptor()->AnalyzeCommandResponse(data, path, status);
+            auto contextManager = fuzzer->GetContextManager();
+
+            ChipLogProgress(chipFuzzer, "Moving fuzzer context state to INVOKE_RESPONSE.");
+            contextManager->MoveToState(fuzz::FuzzerContextStatus::INVOKE_RESPONSE);
         }
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
         {
-
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
             mError = error;
             return;
@@ -171,6 +222,13 @@ public:
         {
             ClearICDEntry(mScopedNodeId);
         }
+
+        if (IsFuzzing() && error == CHIP_NO_ERROR)
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            // Now wait for subscription data
+            LogErrorOnFailure(contextManager->Update(chip::NullOptional, chip::Optional<bool>::Value(true)));
+        }
     }
 
     virtual void OnError(const chip::app::CommandSender * client, CHIP_ERROR error) override
@@ -182,12 +240,8 @@ public:
 
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, error);
-            }
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeCommandError(
+                chip::Protocols::InteractionModel::MsgType::InvokeCommandResponse, error);
         }
     }
 

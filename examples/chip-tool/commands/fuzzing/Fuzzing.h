@@ -4,11 +4,173 @@
 #include "Oracle.h"
 #include "tlv/DecodedTLVElement.h"
 #include "tlv/TLVDataPayloadHelper.h"
+#include <condition_variable>
+#include <numeric>
 
+class ClusterCommand;
 class FuzzingCommand;
 class FuzzingStartCommand;
+
 namespace chip {
+
 namespace fuzzing {
+
+/**
+ * @brief The status of the current fuzzer context. It represents the last event occurred in the context.
+ *
+ */
+class FuzzerContextStatus
+{
+public:
+    enum Status : uint8_t
+    {
+        UNINITIALIZED,
+        NON_INVOKE_REQUEST,
+        INVOKE_REQUEST,
+        NON_INVOKE_RESPONSE,
+        INVOKE_RESPONSE,
+        SUBSCRIPTION_RESPONSE,
+        TERMINATED
+    };
+    bool operator>=(Status rhs) { return static_cast<uint8_t>(mStatus) >= static_cast<uint8_t>(rhs); }
+    bool operator<(Status rhs) { return static_cast<uint8_t>(mStatus) < static_cast<uint8_t>(rhs); }
+    void operator=(Status rhs) { mStatus = rhs; }
+    bool operator==(Status rhs) { return mStatus == rhs; }
+    bool operator!=(Status rhs) { return mStatus != rhs; }
+    uint8_t AsInteger() { return static_cast<uint8_t>(mStatus); }
+
+private:
+    Status mStatus = UNINITIALIZED;
+};
+
+struct FuzzerContext
+{
+    std::condition_variable * cv;
+    std::mutex * mutex;
+    bool * waitingForResponse;
+    bool waitingForSubscriptionData = false;
+    bool needsSubscriptionData      = false;
+    uint32_t id;
+    chip::NodeId destination;
+    FuzzerContextStatus status;
+    chip::Optional<chip::app::ConcreteCommandPath> commandPath = chip::NullOptional;
+    CHIP_ERROR * commandStatusResponse;
+    utils::DataAttributePathSet changedAttributes;
+};
+class FuzzerContextManager
+{
+public:
+    FuzzerContextManager() = default;
+
+    void Initialize(std::condition_variable * cv, std::mutex * mutex, bool * waitingForResponse);
+    CHIP_ERROR Update(CHIP_ERROR * err);
+    CHIP_ERROR Update(chip::NodeId dst, CHIP_ERROR * err);
+    CHIP_ERROR Update(chip::NodeId dst, chip::app::ConcreteCommandPath commandPath, CHIP_ERROR * err);
+    CHIP_ERROR Update(utils::DataAttributePathSet attrs);
+    CHIP_ERROR Update(chip::Optional<bool> waitingForResponse, chip::Optional<bool> waitingForSubscriptionData);
+    CHIP_ERROR Finalize();
+    CHIP_ERROR MoveToState(FuzzerContextStatus::Status newState)
+    {
+        std::unique_lock<std::mutex> lk(mContextManagerMutex);
+        VerifyOrReturnError(mContext, CHIP_FUZZER_ERROR_UNINITIALIZED_CONTEXT);
+        std::unique_lock<std::mutex> ctxlk(*mContext->mutex);
+        VerifyOrReturnError(mContext->status < newState, CHIP_FUZZER_ERROR_CONTEXT_LOCKED);
+        mContext->status = newState;
+        return CHIP_NO_ERROR;
+    }
+
+    CHIP_ERROR Close(bool skipErrors = false)
+    {
+        std::unique_lock<std::mutex> lk(mContextManagerMutex);
+        VerifyOrReturnError(mContext || skipErrors, CHIP_FUZZER_ERROR_UNINITIALIZED_CONTEXT);
+        {
+            std::unique_lock<std::mutex> ctxlk(*mContext->mutex);
+            VerifyOrReturnError(mContext->status == FuzzerContextStatus::TERMINATED || skipErrors,
+                                CHIP_FUZZER_ERROR_CONTEXT_LOCKED);
+            delete mContext;
+        }
+        mContext = nullptr;
+        return CHIP_NO_ERROR;
+    }
+
+    bool IsInitialized()
+    {
+        std::unique_lock<std::mutex> lk(mContextManagerMutex);
+        return mContext != nullptr;
+    }
+    FuzzerContextStatus & CurrentStatus()
+    {
+        std::unique_lock<std::mutex> lk(mContextManagerMutex);
+        VerifyOrDie(mContext != nullptr);
+        std::unique_lock<std::mutex> ctxlk(*mContext->mutex);
+        return mContext->status;
+    }
+
+    bool WaitForContextUpdate(std::chrono::system_clock::time_point & waitingUntil)
+    {
+        std::unique_lock<std::mutex> lk(*mContext->mutex);
+        return mContext->cv->wait_until(lk, waitingUntil, [this]() { return !(*mContext->waitingForResponse); });
+    }
+
+private:
+    FuzzerContext * mContext = nullptr;
+    std::mutex mContextManagerMutex;
+};
+
+class PerformanceMonitor
+{
+public:
+    std::tuple<uint32_t, uint32_t, uint32_t> GetErrorMetrics();
+    bool IsObservationUnseen(const utils::FuzzerObservation & observation) const
+    {
+        auto counter = mObservationCounters.find(observation);
+        VerifyOrReturnValue(counter != mObservationCounters.end(), false);
+        return !counter->second;
+    }
+    void LogObservation(const utils::FuzzerObservation & observation);
+
+private:
+    std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mErrorCounters;
+    std::unordered_map<utils::FuzzerObservation, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mObservationCounters;
+};
+
+class CallbackInterceptor
+{
+public:
+    CallbackInterceptor() = delete;
+    CallbackInterceptor(DeviceStateManager & deviceStateManager, Oracle & oracle, NodeId & dst) :
+        mDeviceStateManager(deviceStateManager), mOracle(oracle), mCurrentDestination(dst)
+    {}
+    // Analyzes data coming from the ClusterCommand::OnResponse callback.
+    void AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
+                                const chip::app::StatusIB & status);
+
+    // Analyzes data coming from the ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks.
+    void ProcessReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
+                           const chip::app::StatusIB & status);
+
+    // Analyzes data coming from the ReportCommand::OnEventData callback.
+    void ProcessReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
+                           const chip::app::StatusIB * status);
+
+    /**
+     * Analyzes a recoverable error occurred while reporting, i.e. errors on single attributes in a transaction that involves
+     * multiple ones. Currently it is only used when a read operation on an attribute with manufacturer-specific default value
+     * conformance is done. In such case, the attribute value is uninitialized and it needs to be written at least once before
+     * attempting a successful read.
+     */
+    void AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status);
+
+    // Analyzes data coming from the OnError callbacks.
+    void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
+                             CHIP_ERROR expectedError = CHIP_NO_ERROR);
+
+private:
+    DeviceStateManager & mDeviceStateManager;
+    Oracle & mOracle;
+    NodeId & mCurrentDestination;
+};
+
 /**
  * @brief Generates mutated commands to test the CHIP device's behavior, as well as
  * saving the valid ones as future reference.
@@ -28,39 +190,24 @@ public:
         return &f;
     }
 
-    // Analyzes data coming from the ClusterCommand::OnResponse callback.
-    void AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
-                                const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
-
-    // Analyzes data coming from the ReportCommand::OnAttributeData and WriteAttributeCommand::OnResponse callbacks.
-    void AnalyzeReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
-                           const chip::app::StatusIB & status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
-
-    // Analyzes data coming from the ReportCommand::OnEventData callback.
-    void AnalyzeReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
-                           const chip::app::StatusIB * status, chip::app::StatusIB expectedStatus = chip::app::StatusIB());
-
-    /**
-     * Analyzes a recoverable error occurred while reporting, i.e. errors on single attributes in a transaction that involves
-     * multiple ones. Currently it is only used when a read operation on an attribute with manufacturer-specific default value
-     * conformance is done. In such case, the attribute value is uninitialized and it needs to be written at least once before
-     * attempting a successful read.
-     */
-    void AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path, const chip::app::StatusIB & status);
-
-    // Analyzes data coming from the OnError callbacks.
-    void AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
-                             CHIP_ERROR expectedError = CHIP_NO_ERROR);
-
-    void ProcessDescriptorClusterResponse(std::shared_ptr<TLV::DecodedTLVElement> decoded,
-                                          const chip::app::ConcreteDataAttributePath & path, NodeId node);
-
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
+    FuzzerContextManager * GetContextManager() { return &mContextManager; };
+    CallbackInterceptor * GetCallbackInterceptor() { return &mCallbackInterceptor; }
+    Oracle * GetOracle() { return &mOracle; }
 
 protected:
     // FuzzingStartCommand must be a friend class as it is the only allowed to instantiate the Fuzzer class.
     friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
+
+    DeviceStateManager mDeviceStateManager;
+    FuzzerContextManager mContextManager;
+    CallbackInterceptor mCallbackInterceptor;
+    Oracle mOracle;
+
+    fs::path mSeedsDirectory;
+    Optional<fs::path> mOutputDirectory = NullOptional;
+    Optional<fs::path> mHistoryPath     = NullOptional;
 
     static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
                            fs::path dumpDirectory)
@@ -79,28 +226,22 @@ protected:
         GetInstance(&init);
     }
 
-    fs::path mSeedsDirectory;
-    Optional<fs::path> mOutputDirectory = NullOptional;
-    Optional<fs::path> mHistoryPath     = NullOptional;
-    DeviceStateManager mDeviceStateManager;
-    std::shared_ptr<Oracle> mOracle;
-
     // TODO: Should the fuzzer log oracle outputs too?
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
-    CHIP_ERROR AppendToHistory(const char * command)
+    CHIP_ERROR AppendToHistory(const char * command, CHIP_ERROR statusResponse)
     {
-        mCommandHistory.push_back(std::string(command));
+        mCommandHistory.push_back(CommandHistoryEntry{ std::string(command), statusResponse, mOracle.GetCurrentStatus() });
         return CHIP_NO_ERROR;
     }
 
 private:
     Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
-        mSeedsDirectory(seedsDirectory), mDeviceStateManager(DeviceStateManager(dumpDirectory)), mOracle(new Oracle()),
-        mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
+        mDeviceStateManager(dumpDirectory), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
     Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
            fs::path outputDirectory) :
-        mSeedsDirectory(seedsDirectory), mDeviceStateManager(DeviceStateManager(dumpDirectory)), mOracle(new Oracle()),
-        mGenerationFunc(generationFunc), mCurrentDestination(dst)
+        mDeviceStateManager(dumpDirectory), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst)
     {
         mOutputDirectory.SetValue(outputDirectory);
     };
@@ -112,7 +253,7 @@ private:
     // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
     std::function<const char *(fs::path)> mGenerationFunc;
     NodeId mCurrentDestination;
-    std::vector<std::string> mCommandHistory;
+    std::vector<CommandHistoryEntry> mCommandHistory;
 };
 
 std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);

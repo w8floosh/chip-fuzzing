@@ -38,6 +38,7 @@ extern template void ProcessDescriptorClusterResponse<ClusterId>(std::shared_ptr
 
 void ProcessBasicInformationClusterResponse(std::shared_ptr<DecodedTLVElement> decoded, const app::ConcreteDataAttributePath & path,
                                             NodeId node);
+
 } // namespace TLV
 
 const AnyType & AttributeWrapperRead(AttributeWrapper * attribute);

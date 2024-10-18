@@ -4,6 +4,7 @@
 #include "tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
+#include <map>
 
 namespace Visitors = chip::fuzzing::Visitors;
 
@@ -133,7 +134,8 @@ void Visitors::TLV::ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVE
                         {
                             ClusterId cluster = ConvertToIdType<ClusterId>(element);
                             // TODO: Get cluster revision dynamically
-                            if (IsManufacturerSpecificTestingCluster(cluster) || cluster == chip::app::Clusters::Descriptor::Id)
+                            if (fuzz::IsManufacturerSpecificTestingCluster(cluster) ||
+                                cluster == chip::app::Clusters::Descriptor::Id)
                                 continue;
                             deviceState->Add(node, path.mEndpointId, cluster);
                         }

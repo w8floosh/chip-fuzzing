@@ -20,7 +20,12 @@
 
 #include <app/tests/suites/commands/interaction_model/InteractionModel.h>
 
+#if CONFIG_USE_BLACKBOX_FUZZING
+#include "../fuzzing/ForwardDeclarations.h"
 #include "../fuzzing/Fuzzing.h"
+#include "../fuzzing/Utils.h"
+#include <thread>
+#endif // CONFIG_USE_BLACKBOX_FUZZING
 #include "DataModelLogger.h"
 #include "ModelCommand.h"
 
@@ -37,10 +42,8 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
             // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
-            fuzzer->AnalyzeReportData(data, path, status);
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->ProcessReportData(data, path, status);
         }
 
         CHIP_ERROR error = status.ToChipError();
@@ -51,9 +54,7 @@ public:
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
             if (IsFuzzing())
             {
-                using Fuzzer    = chip::fuzzing::Fuzzer;
-                Fuzzer * fuzzer = Fuzzer::GetInstance();
-                fuzzer->AnalyzeReportError(path, status);
+                fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(path, status);
             }
             else
             {
@@ -85,13 +86,7 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
-                fuzzer->AnalyzeReportData(eventHeader, data, status);
-            }
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->ProcessReportData(eventHeader, data, status);
         }
 
         if (status != nullptr)
@@ -130,12 +125,8 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::ReportData, error);
-            }
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeCommandError(
+                chip::Protocols::InteractionModel::MsgType::ReportData, error);
         }
         LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
 
@@ -146,6 +137,12 @@ public:
     void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override
     {
         InteractionModelReports::OnDeallocatePaths(std::move(aReadPrepareParams));
+    }
+
+    void OnDone(chip::app::ReadClient * aReadClient) override
+    {
+        InteractionModelReports::CleanupReadClient(aReadClient);
+        SetCommandExitStatus(mError);
     }
 
     void Shutdown() override
@@ -167,6 +164,8 @@ protected:
     }
 
     CHIP_ERROR mError = CHIP_NO_ERROR;
+    // This set is used only to store the processed attribute reports when subscription responses are received.
+    fuzz::utils::DataAttributePathSet mProcessedDataAttributePathSet;
 };
 
 class ReadCommand : public ReportCommand
@@ -175,6 +174,17 @@ protected:
     ReadCommand(const char * commandName, CredentialIssuerCommands * credsIssuerConfig) :
         ReportCommand(commandName, credsIssuerConfig)
     {}
+
+    void OnReportEnd() override
+    {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            LogErrorOnFailure(contextManager->Update(&mError));
+            mProcessedDataAttributePathSet.clear();
+            VerifyOrDie(mProcessedDataAttributePathSet.empty());
+        }
+    }
 
     void OnDone(chip::app::ReadClient * aReadClient) override
     {
@@ -194,6 +204,43 @@ protected:
     {
         mSubscriptionEstablished = true;
         SetCommandExitStatus(CHIP_NO_ERROR);
+    }
+
+    void OnReportBegin() override
+    {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            if (contextManager->CurrentStatus() == fuzz::FuzzerContextStatus::NON_INVOKE_REQUEST)
+                LogErrorOnFailure(contextManager->MoveToState(fuzz::FuzzerContextStatus::NON_INVOKE_RESPONSE));
+        }
+    }
+
+    void OnReportEnd() override
+    {
+        if (IsFuzzing() && !mSubscriptionEstablished)
+        {
+            ChipLogProgress(chipFuzzer, "Subscription data received");
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            // This is helpful because at the subscription establishment this callback may be called and we currently don't care
+            // analyzing that report, so we skip it.
+            if (contextManager->CurrentStatus() == fuzz::FuzzerContextStatus::NON_INVOKE_RESPONSE)
+            {
+                mProcessedDataAttributePathSet.clear();
+            }
+            else if (contextManager->CurrentStatus() != fuzz::FuzzerContextStatus::INVOKE_RESPONSE)
+            {
+                ChipLogError(chipFuzzer, "Bad context: incorrect state for receiving subscription data");
+            }
+            else
+            {
+                LogErrorOnFailure(contextManager->Update(mProcessedDataAttributePathSet));
+                mProcessedDataAttributePathSet.clear();
+            }
+
+            LogErrorOnFailure(contextManager->Update(chip::NullOptional, chip::Optional<bool>::Value(false)));
+            ChipLogProgress(chipFuzzer, "Subscription data processed");
+        }
     }
 
     void OnDone(chip::app::ReadClient * aReadClient) override
@@ -257,6 +304,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return ReadCommand::ReadAttribute(device, endpointIds, mClusterIds, mAttributeIds);
     }
 
@@ -314,6 +366,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeAttribute(device, endpointIds, mClusterIds, mAttributeIds);
     }
@@ -381,6 +438,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return ReadCommand::ReadEvent(device, endpointIds, mClusterIds, mEventIds);
     }
 
@@ -443,6 +505,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeEvent(device, endpointIds, mClusterIds, mEventIds);
     }
@@ -475,6 +542,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return ReadCommand::ReadNone(device);
     }
 };
@@ -511,6 +583,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return ReadCommand::ReadAll(device, endpointIds, mClusterIds, mAttributeIds, mEventIds);
     }
 
@@ -541,6 +618,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return SubscribeCommand::SubscribeNone(device);
     }
 };
@@ -575,6 +657,11 @@ public:
 
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds) override
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeAll(device, endpointIds, mClusterIds, mAttributeIds, mEventIds);
     }
