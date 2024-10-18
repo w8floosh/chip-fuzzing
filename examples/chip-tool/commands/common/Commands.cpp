@@ -238,7 +238,7 @@ int Commands::RunInteractive(const char * command, const chip::Optional<char *> 
     return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 
-int Commands::RunFuzzing(const char * command)
+CHIP_ERROR Commands::RunFuzzing(const char * command)
 {
     int argc                                    = 0;
     char * argv[kFuzzingModeArgumentsMaxLength] = {};
@@ -253,7 +253,7 @@ int Commands::RunFuzzing(const char * command)
         delete[] argv[i];
     }
 
-    return (err == CHIP_NO_ERROR) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return err;
 }
 
 CHIP_ERROR Commands::RunCommand(int argc, char ** argv, bool interactive,

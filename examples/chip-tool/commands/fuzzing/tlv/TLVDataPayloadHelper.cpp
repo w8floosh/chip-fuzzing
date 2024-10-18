@@ -193,3 +193,10 @@ void fuzz::TLV::TLVDataPayloadHelper::PrettyPrint()
     printBuffer.Init(mPayloadReader);
     chip::TLV::Debug::Dump(printBuffer, TLVPrettyPrinter);
 }
+
+void fuzz::TLV::TLVDataPayloadHelper::PrintRaw(const uint8_t * data, size_t length)
+{
+    chip::TLV::TLVReader reader;
+    reader.Init(data, length);
+    chip::TLV::Debug::Dump(reader, TLVPrettyPrinter);
+}

@@ -44,7 +44,7 @@ public:
     }
     int Run(int argc, char ** argv);
     int RunInteractive(const char * command, const chip::Optional<char *> & storageDirectory, bool advertiseOperational);
-    int RunFuzzing(const char * command);
+    CHIP_ERROR RunFuzzing(const char * command);
 
 private:
     struct CommandSet

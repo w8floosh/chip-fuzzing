@@ -28,6 +28,10 @@
 #include <lib/support/ScopedBuffer.h>
 #include <lib/support/TestGroupData.h>
 #include <platform/LockTracker.h>
+#include <thread>
+#if CONFIG_USE_BLACKBOX_FUZZING
+#include "../fuzzing/Fuzzing.h"
+#endif // CONFIG_USE_BLACKBOX_FUZZING
 
 #include <string>
 
@@ -581,6 +585,27 @@ void CHIPCommand::CleanupAfterRun()
 
 CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::System::Clock::Timeout timeout, bool * timedOut)
 {
+    // IMPORTANT! When in fuzzer mode, do not access to the local IPC variables.
+    // Always refer at the current fuzzer context's IPC data.
+    if (IsFuzzing())
+    {
+        /**
+         * When the fuzzer is in discovery phase (acquiring data model and basic information as well as subscribing attributes),
+         * it will never wait for subscription reports (waitingForSubscriptionFlag = false) and no context will be initialized.
+         * Context is initialized for the first time at the beginning of the testing phase, when the first ClusterCommand issued
+         * starts creating a context.
+         */
+
+        auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+        if (!contextManager->IsInitialized())
+        {
+            // Called when no context is available yet or the current context went out of scope.
+            contextManager->Initialize(&cvWaitingForResponse, &cvWaitingForResponseMutex, &mWaitingForResponse);
+        }
+        ChipLogProgress(chipFuzzer, "Waiting for response...");
+        ReturnErrorOnFailure(contextManager->Update(chip::Optional<bool>::Value(true), chip::NullOptional));
+    }
+    else
     {
         std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
         mWaitingForResponse = true;
@@ -589,6 +614,11 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
     auto err = chip::DeviceLayer::PlatformMgr().ScheduleWork(callback, reinterpret_cast<intptr_t>(this));
     if (CHIP_NO_ERROR != err)
     {
+        if (IsFuzzing())
+        {
+            ChipLogError(chipFuzzer, "Stopping waiting for response due to error: %s", chip::ErrorStr(err));
+        }
+        else
         {
             std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
             mWaitingForResponse = false;
@@ -597,11 +627,18 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
     }
 
     auto waitingUntil = std::chrono::system_clock::now() + std::chrono::duration_cast<std::chrono::seconds>(timeout);
+    if (IsFuzzing())
+    {
+        auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+        ChipLogProgress(chipFuzzer, "Waiting for context update...");
+        *timedOut = !contextManager->WaitForContextUpdate(waitingUntil);
+        ChipLogProgress(chipFuzzer, "Context updated after command %s.", *timedOut ? "timeout" : "response");
+    }
+    else
     {
         std::unique_lock<std::mutex> lk(cvWaitingForResponseMutex);
         *timedOut = !cvWaitingForResponse.wait_until(lk, waitingUntil, [this]() { return !this->mWaitingForResponse; });
     }
-
     return CHIP_NO_ERROR;
 }
 
@@ -654,11 +691,19 @@ CHIP_ERROR CHIPCommand::StartWaiting(chip::System::Clock::Timeout duration)
 void CHIPCommand::StopWaiting()
 {
 #if CONFIG_USE_SEPARATE_EVENTLOOP
+    if (IsFuzzing())
     {
-        std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
-        mWaitingForResponse = false;
+        auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+        VerifyOrDie(CHIP_NO_ERROR == contextManager->Update(chip::Optional<bool>::Value(false), chip::NullOptional));
     }
-    cvWaitingForResponse.notify_all();
+    else
+    {
+        {
+            std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
+            mWaitingForResponse = false;
+        }
+        cvWaitingForResponse.notify_all();
+    }
 #else  // CONFIG_USE_SEPARATE_EVENTLOOP
     LogErrorOnFailure(chip::DeviceLayer::PlatformMgr().StopEventLoopTask());
 #endif // CONFIG_USE_SEPARATE_EVENTLOOP
