@@ -694,16 +694,17 @@ void CHIPCommand::StopWaiting()
     if (IsFuzzing())
     {
         auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-        VerifyOrDie(CHIP_NO_ERROR == contextManager->Update(chip::Optional<bool>::Value(false), chip::NullOptional));
-    }
-    else
-    {
+        if (contextManager->IsInitialized())
         {
-            std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
-            mWaitingForResponse = false;
+            VerifyOrDie(CHIP_NO_ERROR == contextManager->Update(chip::Optional<bool>::Value(false), chip::NullOptional));
+            return;
         }
-        cvWaitingForResponse.notify_all();
     }
+    {
+        std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
+        mWaitingForResponse = false;
+    }
+    cvWaitingForResponse.notify_all();
 #else  // CONFIG_USE_SEPARATE_EVENTLOOP
     LogErrorOnFailure(chip::DeviceLayer::PlatformMgr().StopEventLoopTask());
 #endif // CONFIG_USE_SEPARATE_EVENTLOOP

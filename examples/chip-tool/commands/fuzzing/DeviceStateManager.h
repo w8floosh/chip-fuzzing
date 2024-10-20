@@ -213,11 +213,6 @@ public:
     CHIP_ERROR Dump(std::vector<CommandHistoryEntry> commandHistory = std::vector<CommandHistoryEntry>{});
 
     /**
-     * @brief Dumps the result of a command to a YAML file.
-     */
-    CHIP_ERROR Dump(utils::FuzzerObservation observation);
-
-    /**
      * @brief Loads a device state snapshot from a YAML file.
      */
     CHIP_ERROR Load(fs::path src);

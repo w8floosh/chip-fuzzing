@@ -166,7 +166,7 @@ void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outFile, size_t numC
     std::string generatorClassName        = std::string(mGeneratedLexerPath.parent_path().filename().string() + "_Generator." +
                                                         mGeneratedLexerPath.parent_path().filename().string() + "_Generator");
     command << " " << grammarinatorGenerateFile << " " << generatorClassName << " -d " << maxDepth << " -n " << numCases
-            << " --stdout --sys-path " << mGeneratedLexerPath.parent_path().string() << " > " << outFile.string();
+            << " -j 1 --stdout --sys-path " << mGeneratedLexerPath.parent_path().string() << " > " << outFile.string();
 
     ChipLogProgress(chipFuzzer, "Generating test cases...");
     VerifyOrDieWithMsg(std::system(command.str().c_str()) == 0, chipFuzzer, "Failed to generate test cases.");

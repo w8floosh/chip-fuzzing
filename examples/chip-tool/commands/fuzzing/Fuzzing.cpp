@@ -1,4 +1,5 @@
 #include "Fuzzing.h"
+#include "Utils.h"
 #include "Visitors.h"
 #include "generation/Wrappers.cpp"
 #include <app-common/zap-generated/ids/Attributes.h>
@@ -23,7 +24,7 @@ void fuzz::CallbackInterceptor::AnalyzeCommandResponse(chip::TLV::TLVReader * da
         // // TODO: [DISCLAIMER] We assume the request-response-subscription_response flow is synchronous (in this order)
     }
 
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mCommandId, true, status.mStatus);
+    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mCommandId, true, status);
 }
 
 void fuzz::CallbackInterceptor::ProcessReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
@@ -68,7 +69,7 @@ void fuzz::CallbackInterceptor::ProcessReportData(chip::TLV::TLVReader * data, c
         }
     }
 
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status.mStatus);
+    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
 }
 
 void fuzz::CallbackInterceptor::ProcessReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
@@ -85,8 +86,7 @@ void fuzz::CallbackInterceptor::ProcessReportData(const chip::app::EventHeader &
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
     }
 
-    mOracle.Consume(eventHeader.mPath.mEndpointId, eventHeader.mPath.mClusterId, eventHeader.mPath.mEventId, false,
-                    status->mStatus);
+    mOracle.Consume(eventHeader.mPath.mEndpointId, eventHeader.mPath.mClusterId, eventHeader.mPath.mEventId, false, *status);
 }
 
 void fuzz::CallbackInterceptor::AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path,
@@ -96,7 +96,7 @@ void fuzz::CallbackInterceptor::AnalyzeReportError(const chip::app::ConcreteData
         mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId);
     if (attributeState.IsReadable())
         attributeState.ToggleBlockReads();
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status.mStatus);
+    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
 }
 
 void fuzz::CallbackInterceptor::AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
@@ -142,13 +142,15 @@ CHIP_ERROR fuzz::FuzzerContextManager::Update(chip::Optional<bool> waitingForRes
                                               chip::Optional<bool> waitingForSubscriptionData)
 {
     std::unique_lock<std::mutex> lk(mContextManagerMutex);
+    VerifyOrReturnError(mContext, CHIP_FUZZER_ERROR_UNINITIALIZED_CONTEXT);
     std::unique_lock<std::mutex> ctxlk(*mContext->mutex);
     if (waitingForResponse.HasValue())
         *mContext->waitingForResponse = waitingForResponse.Value();
     if (waitingForSubscriptionData.HasValue())
     {
         mContext->waitingForSubscriptionData = waitingForSubscriptionData.Value();
-        if (mContext->waitingForSubscriptionData)
+        if (mContext->waitingForSubscriptionData && mContext->commandPath.HasValue() &&
+            !mStateMonitor.HasExceededSubscriptionTimeoutsLimit(mContext->commandPath.Value()))
             mContext->needsSubscriptionData = true;
     }
     ChipLogProgress(chipFuzzer, "New context flags state: [res: %d, sub: %d]", *mContext->waitingForResponse,
@@ -215,14 +217,23 @@ CHIP_ERROR fuzz::FuzzerContextManager::Finalize()
     std::unique_lock<std::mutex> ctxlk(*mContext->mutex);
     if (mContext->needsSubscriptionData && mContext->status == FuzzerContextStatus::INVOKE_RESPONSE)
     {
+        ChipLogProgress(chipFuzzer, "Waiting for subscription data...");
         bool subscriptionDataReceived =
-            (*mContext->cv).wait_until(ctxlk, std::chrono::system_clock::now() + std::chrono::seconds(5), [this] {
+            (*mContext->cv).wait_until(ctxlk, std::chrono::system_clock::now() + std::chrono::seconds(3), [this] {
                 return mContext->status == FuzzerContextStatus::SUBSCRIPTION_RESPONSE;
             });
         if (!subscriptionDataReceived)
         {
             ChipLogError(chipFuzzer, "Subscription data was not received in time.");
             err = CHIP_FUZZER_ERROR_SUBSCRIPTION_RESPONSE_TIMEOUT;
+            mStateMonitor.IncrementSubscriptionTimeouts(mContext->commandPath.Value());
+        }
+        else
+        {
+            ChipLogDetail(chipFuzzer, "Resetting subscription timeouts for command (%d, %d, %d)",
+                          mContext->commandPath.Value().mEndpointId, mContext->commandPath.Value().mClusterId,
+                          mContext->commandPath.Value().mCommandId);
+            mStateMonitor.ResetSubscriptionTimeouts(mContext->commandPath.Value());
         }
     }
 
@@ -232,22 +243,53 @@ CHIP_ERROR fuzz::FuzzerContextManager::Finalize()
 
     ChipLogProgress(chipFuzzer, "Moving fuzzer context state to TERMINATED.");
     mContext->status = FuzzerContextStatus::TERMINATED;
+    if (mContext->commandPath.HasValue())
+        mStateMonitor.LogObservation(
+            { mContext->commandPath.Value(), *mContext->commandStatusResponse, mContext->changedAttributes });
 
     mContext->cv->notify_all();
+
     return err;
 }
 
-std::tuple<uint32_t, uint32_t, uint32_t> fuzz::PerformanceMonitor::GetErrorMetrics()
+void fuzz::StateMonitor::LogObservation(const utils::FuzzerObservation & observation)
 {
-    // TODO: return std::make_tuple(mErrorCount, mExpectedErrorCount, mUnexpectedErrorCount);
-    return std::make_tuple(0, 0, 0);
+    if (IsObservationUnseen(observation))
+    {
+        DumpObservation(observation);
+    }
+    mObservationCounters[observation]++;
 }
 
-void fuzz::PerformanceMonitor::LogObservation(const utils::FuzzerObservation & observation)
+void fuzz::StateMonitor::DumpObservation(const utils::FuzzerObservation & observation)
 {
-    mObservationCounters[observation]++;
-    Fuzzer::GetInstance()->GetDeviceStateManager()->Dump(observation);
+    YAML::Emitter os;
+
+    os << YAML::BeginMap;
+    os << YAML::Key << "endpoint" << YAML::Value << observation.mCommandPath.mEndpointId;
+    os << YAML::Key << "cluster" << YAML::Value << observation.mCommandPath.mClusterId;
+    os << YAML::Key << "command" << YAML::Value << observation.mCommandPath.mCommandId;
+    os << YAML::Key << "statusResponse" << YAML::Value << YAML::Hex << observation.mStatusResponse.AsInteger() << YAML::Dec;
+    os << YAML::Key << "changedAttributes" << YAML::Value << YAML::BeginSeq;
+    for (auto & path : observation.mChangedAttributes)
+    {
+        os << YAML::BeginMap;
+        os << YAML::Key << "endpoint" << YAML::Value << path.mEndpointId;
+        os << YAML::Key << "cluster" << YAML::Value << path.mClusterId;
+        os << YAML::Key << "attribute" << YAML::Value << path.mAttributeId;
+        // TODO: maybe also log the new value?
+        // os << YAML::Key << "newValue" << YAML::Value << path.mData;
+        os << YAML::EndMap;
+    }
+    os << YAML::EndSeq << YAML::EndMap;
+    auto now    = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    std::string fileName(std::to_string(now_ms));
+    std::ofstream file(mDumpDirectory / fileName);
+    file << os.c_str();
+    file.close();
 }
+
 CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath)
 {
     namespace fs = std::filesystem;
