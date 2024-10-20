@@ -1,9 +1,10 @@
 #include "Oracle.h"
+#include "Fuzzing.h"
 #include "Utils.h"
 namespace fuzz = chip::fuzzing;
 
 const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject,
-                                                 bool isCommand, const IMStatus & observed,
+                                                 bool isCommand, const chip::app::StatusIB & observed,
                                                  const chip::Optional<ClusterStatus> & observedClusterSpecific)
 {
     mLastStatus = mCurrentStatus;
@@ -12,7 +13,7 @@ const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip
         // TODO: Implement cluster-specific status handling
         return mCurrentStatus;
     }
-    if (observed == IMStatus::Timeout)
+    if (observed.mStatus == IMStatus::Timeout)
     {
         if (mLastStatus == OracleStatus::TIMEOUT)
             // Device may have crashed
@@ -23,8 +24,11 @@ const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip
         return mCurrentStatus;
     }
 
-    OracleResult result = mRuleMap.Query(endpoint, cluster, subject, isCommand, observed);
+    OracleResult result = mRuleMap.Query(endpoint, cluster, subject, isCommand, observed.mStatus);
     mCurrentStatus      = result.statusResult;
+
+    mStateMonitor.TrackError(observed.ToChipError(), result);
+
     return mCurrentStatus;
 }
 

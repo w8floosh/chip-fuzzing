@@ -1,6 +1,7 @@
 #pragma once
 #include "ForwardDeclarations.h"
 #include <numeric>
+#include <yaml-cpp/yaml.h>
 
 namespace chip {
 namespace fuzzing {
@@ -23,7 +24,7 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
 
 struct SetKeyHasher
 {
-    std::size_t operator()(const ConcreteDataAttributePathKey & path) const
+    std::size_t operator()(const chip::app::ConcreteDataAttributePath & path) const
     {
         return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
             std::hash<chip::AttributeId>{}(path.mAttributeId);
@@ -31,7 +32,12 @@ struct SetKeyHasher
 };
 
 using DataAttributePathSet = std::unordered_set<chip::app::ConcreteDataAttributePath, SetKeyHasher>;
-using FuzzerObservation    = std::tuple<chip::app::ConcreteCommandPath, CHIP_ERROR, DataAttributePathSet>;
+struct FuzzerObservation
+{
+    chip::app::ConcreteCommandPath mCommandPath;
+    CHIP_ERROR mStatusResponse;
+    DataAttributePathSet mChangedAttributes;
+};
 
 struct MapKeyHasher
 {
@@ -41,23 +47,28 @@ struct MapKeyHasher
             std::hash<chip::AttributeId>{}(std::get<2>(k)) ^ std::get<3>(k);
     }
 
-    std::size_t operator()(const ConcreteDataAttributePathKey & path) const
+    std::size_t operator()(const chip::app::ConcreteDataAttributePath & path) const
     {
         return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
             std::hash<chip::AttributeId>{}(path.mAttributeId);
     }
 
+    std::size_t operator()(const chip::app::ConcreteCommandPath & path) const
+    {
+        return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
+            std::hash<chip::CommandId>{}(path.mCommandId);
+    }
+
     std::size_t operator()(const FuzzerObservation & k) const
     {
-        auto pathSet = std::get<2>(k);
-        std::vector<uint64_t> dataAttributePathSetSums(std::get<2>(k).size());
-        std::transform(pathSet.begin(), pathSet.end(), dataAttributePathSetSums.begin(), [](auto & path) {
+        std::vector<uint64_t> dataAttributePathSetSums(k.mChangedAttributes.size());
+        std::transform(k.mChangedAttributes.begin(), k.mChangedAttributes.end(), dataAttributePathSetSums.begin(), [](auto & path) {
             return static_cast<uint64_t>(path.mEndpointId) + static_cast<uint64_t>(path.mClusterId) +
                 static_cast<uint64_t>(path.mAttributeId);
         });
 
-        return std::hash<uint32_t>{}(std::get<0>(k).mEndpointId ^ std::get<0>(k).mClusterId ^ std::get<0>(k).mCommandId) ^
-            std::hash<uint32_t>{}(std::get<1>(k).AsInteger()) ^
+        return std::hash<uint32_t>{}(k.mCommandPath.mEndpointId ^ k.mCommandPath.mClusterId ^ k.mCommandPath.mCommandId) ^
+            std::hash<uint32_t>{}(k.mStatusResponse.AsInteger()) ^
             std::hash<uint64_t>{}(std::reduce(dataAttributePathSetSums.begin(), dataAttributePathSetSums.end()));
     }
 
@@ -74,7 +85,8 @@ struct MapKeyEqualizer
 
     bool operator()(const FuzzerObservation & k0, const FuzzerObservation & k1) const
     {
-        return (std::get<0>(k0) == std::get<0>(k1) && std::get<1>(k0) == std::get<1>(k1) && std::get<2>(k0) == std::get<2>(k1));
+        return k0.mCommandPath == k1.mCommandPath && k0.mStatusResponse == k1.mStatusResponse &&
+            k0.mChangedAttributes == k1.mChangedAttributes;
     }
 };
 
