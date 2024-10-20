@@ -1,0 +1,139 @@
+[0;32m
+  WELCOME TO...
+[0m
+[0;37m         █[0m
+[0;37m         █[0m
+[0;37m     ▄   █   ▄                                █     █[0m
+[0;37m     ▀▀█████▀▀      ▄▀▀▀▄ ▄▀▀▀▄    ▄▀▀▀▀▄█  ▀▀█▀▀▀▀▀█▀▀   ▄▀▀▀▀▄    ▄▀▀[0m
+[0;37m   ▀█▄       ▄█▀   █     █     █  █      █    █     █    █▄▄▄▄▄▄█  █   [0m
+[0;37m     ▀█▄   ▄█▀     █     █     █  █      █    █     █    █         █   [0m
+[0;37m  ▄██▀▀█   █▀▀██▄  █     █     █   ▀▄▄▄▄▀█    ▀▄▄   ▀▄▄   ▀▄▄▄▄▀   █   [0m
+[0;37m ▀▀    █   █    ▀▀[0m
+
+[0;32m  ACTIVATOR! This sets your shell environment variables.
+[0m
+[1mActivating environment (setting environment variables):[0m
+
+  Setting environment variables for CIPD package manager...done
+  Setting environment variables for Project actions........skipped
+  Setting environment variables for Python environment.....done
+  Setting environment variables for pw packages............skipped
+  Setting environment variables for Host tools.............done
+
+[1mChecking the environment:[0m
+
+20241020 18:50:42 WRN Current uname (6.11.3-arch1-1 #1 SMP PREEMPT_DYNAMIC Thu, 10 Oct 2024 20:11:06 +0000 x86_64) does not match Bootstrap uname (6.6.52-1-lts #1 SMP PREEMPT_DYNAMIC Wed, 18 Sep 2024 19:02:04 +0000 x86_64), you may need to rerun bootstrap on this system
+20241020 18:50:42 INF Environment passes all checks!
+
+[1mEnvironment looks good, you are ready to go![0m
+
++ env
+SHELL=/bin/bash
+SESSION_MANAGER=local/martin-fx505dt:@/tmp/.ICE-unix/904,unix/martin-fx505dt:/tmp/.ICE-unix/904
+COLORTERM=truecolor
+XDG_CONFIG_DIRS=/home/w8floosh/.config/kdedefaults:/etc/xdg
+XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session2
+XDG_MENU_PREFIX=plasma-
+TERM_PROGRAM_VERSION=1.92.1
+CONDA_EXE=/home/w8floosh/miniforge3/bin/conda
+_CE_M=
+ICEAUTHORITY=/run/user/1000/iceauth_zadTkb
+LANGUAGE=
+LC_ADDRESS=it_IT.UTF-8
+LC_NAME=it_IT.UTF-8
+PW_PROJECT_ROOT=/home/w8floosh/GitHub/chip-fuzzing
+MEMORY_PRESSURE_WRITE=c29tZSAyMDAwMDAgMjAwMDAwMAA=
+DESKTOP_SESSION=plasmax11
+LC_MONETARY=it_IT.UTF-8
+GTK_RC_FILES=/etc/gtk/gtkrc:/home/w8floosh/.gtkrc:/home/w8floosh/.config/gtkrc
+NO_AT_BRIDGE=1
+XML_CATALOG_FILES=file:///home/w8floosh/miniforge3/etc/xml/catalog file:///etc/xml/catalog
+EDITOR=nano
+PW_ZAP_CIPD_INSTALL_DIR=/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/zap
+GTK_MODULES=canberra-gtk-module
+XDG_SEAT=seat0
+PWD=/home/w8floosh/GitHub/chip-fuzzing
+LOGNAME=w8floosh
+XDG_SESSION_DESKTOP=KDE
+CONDA_ROOT=/usr
+XDG_SESSION_TYPE=x11
+CONDA_PREFIX=/home/w8floosh/.conda/envs/matter
+SYSTEMD_EXEC_PID=969
+XAUTHORITY=/tmp/xauth_NGMDSs
+VSCODE_GIT_ASKPASS_NODE=/opt/visual-studio-code/code
+CIPD_CACHE_DIR=/home/w8floosh/.cipd-cache-dir
+MOTD_SHOWN=pam
+GTK2_RC_FILES=/etc/gtk-2.0/gtkrc:/home/w8floosh/.gtkrc-2.0:/home/w8floosh/.config/gtkrc-2.0
+PW_ROOT=/home/w8floosh/GitHub/chip-fuzzing/third_party/pigweed/repo
+HOME=/home/w8floosh
+LANG=it_IT.UTF-8
+LC_PAPER=it_IT.UTF-8
+XDG_CURRENT_DESKTOP=KDE
+VIRTUAL_ENV=/home/w8floosh/GitHub/chip-fuzzing/.environment/pigweed-venv
+MEMORY_PRESSURE_WATCH=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/session.slice/plasma-plasmashell.service/memory.pressure
+CONDA_PROMPT_MODIFIER=(matter) 
+GIT_ASKPASS=/opt/visual-studio-code/resources/app/extensions/git/dist/askpass.sh
+XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
+INVOCATION_ID=ba1f591c97034a61bfb9b65097069044
+MANAGERPID=802
+PW_PYTHON_CIPD_INSTALL_DIR=/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/python
+CHROME_DESKTOP=code-url-handler.desktop
+_PW_ROSETTA=0
+KDE_SESSION_UID=1000
+VSCODE_GIT_ASKPASS_EXTRA_ARGS=
+XDG_SESSION_CLASS=user
+LC_IDENTIFICATION=it_IT.UTF-8
+TERM=xterm-256color
+_CE_CONDA=
+USER=w8floosh
+CUDA_PATH=/opt/cuda
+VSCODE_GIT_IPC_HANDLE=/run/user/1000/vscode-git-1babc4c50e.sock
+CONDA_SHLVL=2
+QT_WAYLAND_RECONNECT=1
+KDE_SESSION_VERSION=6
+PAM_KWALLET5_LOGIN=/run/user/1000/kwallet5.socket
+DISPLAY=:0
+SHLVL=3
+LC_TELEPHONE=it_IT.UTF-8
+PW_PACKAGE_ROOT=/home/w8floosh/GitHub/chip-fuzzing/.environment/packages
+LC_MEASUREMENT=it_IT.UTF-8
+XDG_VTNR=2
+XDG_SESSION_ID=2
+_PW_ENVIRONMENT_CONFIG_FILE=/home/w8floosh/GitHub/chip-fuzzing/scripts/setup/environment.json
+CONDA_PYTHON_EXE=/usr/bin/python
+XDG_RUNTIME_DIR=/run/user/1000
+_PW_ACTUAL_ENVIRONMENT_ROOT=/home/w8floosh/GitHub/chip-fuzzing/.environment
+PW_BRANDING_BANNER=/home/w8floosh/GitHub/chip-fuzzing/scripts/setup/banner.txt
+CONDA_DEFAULT_ENV=matter
+MKLROOT=/opt/intel/oneapi/mkl/latest
+PW_ARM_CIPD_INSTALL_DIR=/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/arm
+DEBUGINFOD_URLS=https://debuginfod.archlinux.org 
+NVCC_CCBIN=/usr/bin/g++-13
+LC_TIME=it_IT.UTF-8
+VSCODE_GIT_ASKPASS_MAIN=/opt/visual-studio-code/resources/app/extensions/git/dist/askpass-main.js
+QT_AUTO_SCREEN_SCALE_FACTOR=0
+JOURNAL_STREAM=9:10456
+KDE_FULL_SESSION=true
+GDK_BACKEND=x11
+BROWSER=firefox
+PATH=/home/w8floosh/GitHub/chip-fuzzing/third_party/pigweed/repo/out/host/host_tools:/home/w8floosh/GitHub/chip-fuzzing/.environment/pigweed-venv/bin:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/arm/bin:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/arm:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/zap:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/pigweed/bin:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/pigweed:/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd:/home/w8floosh/.conda/envs/matter/bin:/home/w8floosh/miniforge3/bin:/usr/condabin:/usr/local/sbin:/usr/local/bin:/usr/bin:/opt/cuda/bin:/opt/cuda/nsight_compute:/opt/cuda/nsight_systems/bin:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl
+ORIGINAL_XDG_CURRENT_DESKTOP=KDE
+DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+KDE_APPLICATIONS_AS_SCOPE=1
+MAIL=/var/spool/mail/w8floosh
+CONDA_PREFIX_1=/usr
+CONDA_PREFIX_2=/home/w8floosh/.conda/envs/matter
+PW_PIGWEED_CIPD_INSTALL_DIR=/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/pigweed
+LC_NUMERIC=it_IT.UTF-8
+OLDPWD=/home/w8floosh/GitHub/chip-fuzzing
+TERM_PROGRAM=vscode
+_=/usr/bin/env
++ gn gen --check --fail-on-unused-args --root=examples/chip-tool out/debug/standalone --args=
+Done. Made 3667 targets from 301 files in 370ms
++ ninja -C out/debug/standalone
+ninja: Entering directory `out/debug/standalone'
+[0/1] Regenerating ninja files
+[1/4] c++ obj/commands/fuzzing/chip-tool-utils.Fuzzing.cpp.o
+[2/4] ar chip-tool-utils.a
+[3/4] ld ./chip-tool
+[4/4] stamp obj/default.stamp

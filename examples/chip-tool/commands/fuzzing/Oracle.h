@@ -174,11 +174,13 @@ private:
 class Oracle
 {
 public:
-    Oracle() : mCurrentStatus(OracleStatus::INITIALIZED), mLastStatus(OracleStatus::UNINITIALIZED) {};
+    Oracle() = delete;
+    Oracle(StateMonitor & sm) :
+        mCurrentStatus(OracleStatus::INITIALIZED), mLastStatus(OracleStatus::UNINITIALIZED), mStateMonitor(sm) {};
     ~Oracle() {};
 
     const OracleStatus & Consume(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject, bool isCommand,
-                                 const IMStatus & observed,
+                                 const chip::app::StatusIB & observed,
                                  const chip::Optional<ClusterStatus> & observedClusterSpecific = chip::NullOptional);
     const OracleStatus & GetCurrentStatus() { return mCurrentStatus; };
     const OracleStatus & GetLastStatus() { return mLastStatus; };
@@ -196,6 +198,7 @@ private:
     OracleStatus mCurrentStatus;
     OracleStatus mLastStatus;
     OracleRuleMap mRuleMap;
+    StateMonitor & mStateMonitor;
 };
 } // namespace fuzzing
 }; // namespace chip

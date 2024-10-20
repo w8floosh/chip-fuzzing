@@ -50,8 +50,7 @@ const char * GenerateCommandSeedOnly(fs::path seedsDir);
 namespace utils {
 
 // Helper types used as keys in maps
-using OracleRuleMapKey             = std::tuple<chip::EndpointId, chip::ClusterId, uint32_t, bool>;
-using ConcreteDataAttributePathKey = chip::app::ConcreteDataAttributePath;
+using OracleRuleMapKey = std::tuple<chip::EndpointId, chip::ClusterId, uint32_t, bool>;
 
 template <typename T, typename... Args>
 struct ExtendedVariant;
@@ -60,6 +59,7 @@ struct MapKeyHasher;
 struct MapKeyEqualizer;
 struct SetKeyHasher;
 
+struct FuzzerObservation;
 static const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes;
 } // namespace utils
 
@@ -68,7 +68,6 @@ class Fuzzer;
 class FuzzerContextManager;
 struct FuzzerContext;
 class FuzzerContextStatus;
-struct CHIPCommandIPCData;
 
 struct AttributeFactory;
 struct AttributeWrapper;
@@ -80,6 +79,8 @@ struct BasicInformation;
 struct DeviceState;
 struct CommandHistoryEntry;
 class DeviceStateManager;
+class CallbackInterceptor;
+class StateMonitor;
 
 class OracleRule;
 class OracleRuleMap;

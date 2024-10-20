@@ -14,6 +14,58 @@ class FuzzingStartCommand;
 namespace chip {
 
 namespace fuzzing {
+class StateMonitor
+{
+public:
+    StateMonitor(fs::path dumpDir = "out/debug/standalone/chip-fuzzer/observations") : mDumpDirectory(dumpDir)
+    {
+        if (!fs::exists(mDumpDirectory))
+        {
+            fs::create_directories(mDumpDirectory);
+        }
+    }
+
+    std::tuple<size_t, size_t, size_t> GetErrorCounters()
+    {
+        return { mErrorCounters.size(), mExpectedErrorCounters.size(), mUnexpectedErrorCounters.size() };
+    }
+    void DumpTelemetry() {}
+    void LogObservation(const utils::FuzzerObservation & observation);
+
+    /**
+     * @brief Dumps the result of a command to a YAML file.
+     */
+    void IncrementSubscriptionTimeouts(const chip::app::ConcreteCommandPath & path) { mSubscriptionTimeouts[path]++; }
+    void ResetSubscriptionTimeouts(const chip::app::ConcreteCommandPath & path) { mSubscriptionTimeouts[path] = 0U; }
+    bool HasExceededSubscriptionTimeoutsLimit(const chip::app::ConcreteCommandPath & path)
+    {
+        return mSubscriptionTimeouts[path] >= 3U;
+    }
+    void TrackError(const CHIP_ERROR & err) { mErrorCounters[err]++; }
+    void TrackError(const CHIP_ERROR & err, OracleResult & ores)
+    {
+        mErrorCounters[err]++;
+        ores.queryResult ? mExpectedErrorCounters[err]++ : mUnexpectedErrorCounters[err]++;
+    }
+
+private:
+    std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mErrorCounters;
+    std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mExpectedErrorCounters;
+    std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mUnexpectedErrorCounters;
+    std::unordered_map<utils::FuzzerObservation, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mObservationCounters;
+    /**
+     * Tracks the number of times a command did not send any subscription report back, timing out.
+     * After a command timed out three times IN A ROW, the fuzzer will not wait anymore for the subscription report to come.
+     */
+    std::unordered_map<chip::app::ConcreteCommandPath, uint16_t, utils::MapKeyHasher> mSubscriptionTimeouts;
+    fs::path mDumpDirectory;
+
+    void DumpObservation(const utils::FuzzerObservation & observation);
+    bool IsObservationUnseen(const utils::FuzzerObservation & observation)
+    {
+        return mObservationCounters.find(observation) == mObservationCounters.end();
+    }
+};
 
 /**
  * @brief The status of the current fuzzer context. It represents the last event occurred in the context.
@@ -60,7 +112,8 @@ struct FuzzerContext
 class FuzzerContextManager
 {
 public:
-    FuzzerContextManager() = default;
+    FuzzerContextManager() = delete;
+    FuzzerContextManager(StateMonitor & pm) : mStateMonitor(pm) {}
 
     void Initialize(std::condition_variable * cv, std::mutex * mutex, bool * waitingForResponse);
     CHIP_ERROR Update(CHIP_ERROR * err);
@@ -115,23 +168,7 @@ public:
 private:
     FuzzerContext * mContext = nullptr;
     std::mutex mContextManagerMutex;
-};
-
-class PerformanceMonitor
-{
-public:
-    std::tuple<uint32_t, uint32_t, uint32_t> GetErrorMetrics();
-    bool IsObservationUnseen(const utils::FuzzerObservation & observation) const
-    {
-        auto counter = mObservationCounters.find(observation);
-        VerifyOrReturnValue(counter != mObservationCounters.end(), false);
-        return !counter->second;
-    }
-    void LogObservation(const utils::FuzzerObservation & observation);
-
-private:
-    std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mErrorCounters;
-    std::unordered_map<utils::FuzzerObservation, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mObservationCounters;
+    StateMonitor & mStateMonitor;
 };
 
 class CallbackInterceptor
@@ -193,6 +230,7 @@ public:
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
     FuzzerContextManager * GetContextManager() { return &mContextManager; };
     CallbackInterceptor * GetCallbackInterceptor() { return &mCallbackInterceptor; }
+    StateMonitor * GetStateMonitor() { return &mStateMonitor; }
     Oracle * GetOracle() { return &mOracle; }
 
 protected:
@@ -201,9 +239,10 @@ protected:
     friend class ::FuzzingStartCommand;
 
     DeviceStateManager mDeviceStateManager;
-    FuzzerContextManager mContextManager;
-    CallbackInterceptor mCallbackInterceptor;
+    StateMonitor mStateMonitor;
     Oracle mOracle;
+    CallbackInterceptor mCallbackInterceptor;
+    FuzzerContextManager mContextManager;
 
     fs::path mSeedsDirectory;
     Optional<fs::path> mOutputDirectory = NullOptional;
@@ -226,7 +265,6 @@ protected:
         GetInstance(&init);
     }
 
-    // TODO: Should the fuzzer log oracle outputs too?
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
     CHIP_ERROR AppendToHistory(const char * command, CHIP_ERROR statusResponse)
     {
@@ -236,11 +274,13 @@ protected:
 
 private:
     Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
-        mDeviceStateManager(dumpDirectory), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
+        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor),
         mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
     Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
            fs::path outputDirectory) :
-        mDeviceStateManager(dumpDirectory), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
+        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor),
         mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst)
     {
         mOutputDirectory.SetValue(outputDirectory);
@@ -251,6 +291,7 @@ private:
     Fuzzer & operator=(Fuzzer &&) noexcept = delete;
 
     // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
+    // May be used to extend the fuzzer to use diverse generation methods aside the default one (Grammarinator).
     std::function<const char *(fs::path)> mGenerationFunc;
     NodeId mCurrentDestination;
     std::vector<CommandHistoryEntry> mCommandHistory;
