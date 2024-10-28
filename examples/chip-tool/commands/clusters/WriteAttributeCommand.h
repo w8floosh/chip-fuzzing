@@ -119,12 +119,7 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeReportData(nullptr, path, status);
-            }
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->ProcessReportData(nullptr, path, status);
         }
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
@@ -140,12 +135,8 @@ public:
     {
         if (IsFuzzing())
         {
-            using Fuzzer    = chip::fuzzing::Fuzzer;
-            Fuzzer * fuzzer = Fuzzer::GetInstance();
-            if (fuzzer != nullptr)
-            {
-                fuzzer->AnalyzeCommandError(chip::Protocols::InteractionModel::MsgType::WriteResponse, error);
-            }
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeCommandError(
+                chip::Protocols::InteractionModel::MsgType::WriteResponse, error);
         }
         LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
 
@@ -162,6 +153,11 @@ public:
     CHIP_ERROR SendCommand(chip::DeviceProxy * device, std::vector<chip::EndpointId> endpointIds,
                            std::vector<chip::ClusterId> clusterIds, std::vector<chip::AttributeId> attributeIds, const T & values)
     {
+        if (IsFuzzing())
+        {
+            auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+        }
         return InteractionModelWriter::WriteAttribute(device, endpointIds, clusterIds, attributeIds, values);
     }
 

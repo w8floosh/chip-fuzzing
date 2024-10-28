@@ -1,6 +1,8 @@
 #include "DeviceStateManager.h"
 #include "Visitors.h"
 #include "tlv/DecodedTLVElement.h"
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 #include <fstream>
 // This header has exception handling code that is not compatible with -fno-exceptions (see BUILD.gn)
 #include <yaml-cpp/yaml.h>
@@ -298,7 +300,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
  * Dumping the device state is a costly operation, as the function traverses and copies the whole device state inside a std::map to
  * dump the keys in ascending order.
  */
-CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistory)
+CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> commandHistory)
 {
     // TODO: Add dumping for events and events history
     auto now    = std::chrono::system_clock::now();
@@ -384,9 +386,14 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<std::string> commandHistor
     if (commandHistory.size() != 0)
     {
         emitter << YAML::Key << "history" << YAML::Value << YAML::BeginSeq;
-        for (const auto & command : commandHistory)
+        for (const auto & entry : commandHistory)
         {
-            emitter << YAML::Value << command;
+            emitter << YAML::BeginMap;
+            emitter << YAML::Key << "command" << YAML::Value << entry.command;
+            emitter << YAML::Key << "statusResponse" << YAML::Value << YAML::Hex << entry.statusResponse.AsInteger();
+            emitter << YAML::Key << "oracleStatus" << YAML::Value << YAML::Hex << static_cast<uint8_t>(entry.oracleStatus)
+                    << YAML::Dec;
+            emitter << YAML::EndMap;
         }
         emitter << YAML::EndSeq;
     }
@@ -431,4 +438,52 @@ CHIP_ERROR fuzz::DeviceStateManager::Load(fs::path src)
         }
     }
     return CHIP_NO_ERROR;
+}
+
+size_t fuzz::DeviceStateManager::GetTotalCommands()
+{
+    size_t totalCommands = 0;
+    for (const auto & [nodeId, nodeState] : *List())
+    {
+        for (const auto & [endpointId, endpointState] : *List(nodeId))
+        {
+            for (const auto & [clusterId, clusterState] : *List(nodeId, endpointId))
+            {
+                auto commandListObj =
+                    (*List(nodeId, endpointId, clusterId))[chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id]
+                        .ReadCurrent();
+                if (!std::holds_alternative<ContainerType>(commandListObj))
+                {
+                    continue;
+                }
+                auto commandList = std::get<ContainerType>(commandListObj);
+                totalCommands += commandList.size();
+            }
+        }
+    }
+    return totalCommands;
+}
+
+size_t fuzz::DeviceStateManager::GetTotalAttributes()
+{
+    size_t totalAttributes = 0;
+    for (const auto & [nodeId, nodeState] : *List())
+    {
+        for (const auto & [endpointId, endpointState] : *List(nodeId))
+        {
+            for (const auto & [clusterId, clusterState] : *List(nodeId, endpointId))
+            {
+                auto attributeListObj =
+                    (*List(nodeId, endpointId, clusterId))[chip::app::Clusters::Globals::Attributes::AttributeList::Id]
+                        .ReadCurrent();
+                if (!std::holds_alternative<ContainerType>(attributeListObj))
+                {
+                    continue;
+                }
+                auto attributeList = std::get<ContainerType>(attributeListObj);
+                totalAttributes += attributeList.size();
+            }
+        }
+    }
+    return totalAttributes;
 }

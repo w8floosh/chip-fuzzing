@@ -21,7 +21,7 @@ struct AttributeWrapper
     AttributeWrapper & operator=(const AttributeWrapper & other)     = default;
     AttributeWrapper & operator=(AttributeWrapper && other) noexcept = default;
 
-    AttributeWrapper(TLVType aType, uint8_t bytes = 0, AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
+    AttributeWrapper(TLV::TLVType aType, uint8_t bytes = 0, AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
         type(aType), quality(aQuality), length(bytes)
     {
         switch (quality)
@@ -36,7 +36,7 @@ struct AttributeWrapper
             break;
         }
     }
-    AttributeWrapper(TLVType aType, AnyType && aValue, uint8_t bytes = 0,
+    AttributeWrapper(TLV::TLVType aType, AnyType && aValue, uint8_t bytes = 0,
                      AttributeQualityEnum aQuality = AttributeQualityEnum::kMandatory) :
         type(aType), quality(aQuality), length(bytes)
     {
@@ -53,7 +53,7 @@ struct AttributeWrapper
         }
         Write(std::move(aValue));
     }
-    TLVType type;
+    TLV::TLVType type;
     AttributeQualityEnum quality;
     uint8_t length;
     // TODO: Add support for nullable attributes
@@ -103,7 +103,7 @@ struct AttributeWrapper
 struct AttributeFactory
 {
 public:
-    static std::shared_ptr<AttributeWrapper> Create(TLVType type, AnyType && value, uint8_t length = 0,
+    static std::shared_ptr<AttributeWrapper> Create(TLV::TLVType type, AnyType && value, uint8_t length = 0,
                                                     AttributeQualityEnum quality = AttributeQualityEnum::kMandatory)
     {
         VerifyOrDie(quality != AttributeQualityEnum::kNullable);
@@ -118,7 +118,7 @@ public:
         return nullptr; // Default factory logic
     };
 
-    static std::shared_ptr<AttributeWrapper> Create(TLVType type, uint8_t length = 0,
+    static std::shared_ptr<AttributeWrapper> Create(TLV::TLVType type, uint8_t length = 0,
                                                     AttributeQualityEnum quality = AttributeQualityEnum::kMandatory)
     {
         return Create(type, AnyType{}, length, quality);

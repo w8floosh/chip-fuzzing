@@ -158,7 +158,11 @@
         "filesystem": "cpp",
         "*.inc": "cpp",
         "*.def": "cpp",
-        "ranges": "cpp"
+        "ranges": "cpp",
+        "print": "cpp",
+        "shared_mutex": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp"
     },
     // Configure paths or glob patterns to exclude from file watching.
     "files.watcherExclude": {

@@ -120,6 +120,7 @@ static_library("chip-tool-utils") {
       "commands/fuzzing/FuzzingCommands.h",
       "commands/fuzzing/Oracle.cpp",
       "commands/fuzzing/Oracle.h",
+      "commands/fuzzing/Utils.cpp",
       "commands/fuzzing/Utils.h",
       "commands/fuzzing/Visitors.cpp",
       "commands/fuzzing/Visitors.h",

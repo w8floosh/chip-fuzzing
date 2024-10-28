@@ -1,9 +1,11 @@
 #pragma once
 #include "ForwardDeclarations.h"
-#include <iostream>
+#include <numeric>
+#include <yaml-cpp/yaml.h>
 
 namespace chip {
 namespace fuzzing {
+
 namespace utils {
 template <typename T, typename... Args>
 struct ExtendedVariant;
@@ -19,54 +21,187 @@ struct ExtendedVariant<std::variant<Args0...>, std::variant<Args1...>>
 {
     using type = std::variant<Args0..., Args1...>;
 };
-} // namespace utils
-using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
-using AnyType       = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 
+struct SetKeyHasher
+{
+    std::size_t operator()(const chip::app::ConcreteDataAttributePath & path) const
+    {
+        return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
+            std::hash<chip::AttributeId>{}(path.mAttributeId);
+    }
+};
+
+using DataAttributePathSet = std::unordered_set<chip::app::ConcreteDataAttributePath, SetKeyHasher>;
+struct FuzzerObservation
+{
+    chip::app::ConcreteCommandPath mCommandPath;
+    CHIP_ERROR mStatusResponse;
+    DataAttributePathSet mChangedAttributes;
+};
+
+struct MapKeyHasher
+{
+    std::size_t operator()(const OracleRuleMapKey & k) const
+    {
+        return std::hash<chip::EndpointId>{}(std::get<0>(k)) ^ std::hash<chip::ClusterId>{}(std::get<1>(k)) ^
+            std::hash<chip::AttributeId>{}(std::get<2>(k)) ^ std::get<3>(k);
+    }
+
+    std::size_t operator()(const chip::app::ConcreteDataAttributePath & path) const
+    {
+        return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
+            std::hash<chip::AttributeId>{}(path.mAttributeId);
+    }
+
+    std::size_t operator()(const chip::app::ConcreteCommandPath & path) const
+    {
+        return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
+            std::hash<chip::CommandId>{}(path.mCommandId);
+    }
+
+    std::size_t operator()(const std::pair<TLV::TLVType, uint8_t> & key) const
+    {
+        return std::hash<int16_t>{}(static_cast<int16_t>(key.first)) ^ std::hash<uint8_t>{}(key.second);
+    }
+
+    std::size_t operator()(const FuzzerObservation & k) const
+    {
+        std::vector<uint64_t> dataAttributePathSetSums(k.mChangedAttributes.size());
+        std::transform(k.mChangedAttributes.begin(), k.mChangedAttributes.end(), dataAttributePathSetSums.begin(), [](auto & path) {
+            return static_cast<uint64_t>(path.mEndpointId) + static_cast<uint64_t>(path.mClusterId) +
+                static_cast<uint64_t>(path.mAttributeId);
+        });
+
+        return std::hash<uint32_t>{}(k.mCommandPath.mEndpointId ^ k.mCommandPath.mClusterId ^ k.mCommandPath.mCommandId) ^
+            std::hash<uint32_t>{}(k.mStatusResponse.AsInteger()) ^
+            std::hash<uint64_t>{}(std::reduce(dataAttributePathSetSums.begin(), dataAttributePathSetSums.end()));
+    }
+
+    std::size_t operator()(const CHIP_ERROR & k) const { return std::hash<uint32_t>{}(k.AsInteger()); }
+};
+
+struct MapKeyEqualizer
+{
+    bool operator()(const OracleRuleMapKey & k0, const OracleRuleMapKey & k1) const
+    {
+        return (std::get<0>(k0) == std::get<0>(k1) && std::get<1>(k0) == std::get<1>(k1) && std::get<2>(k0) == std::get<2>(k1) &&
+                std::get<3>(k0) == std::get<3>(k1));
+    }
+
+    bool operator()(const FuzzerObservation & k0, const FuzzerObservation & k1) const
+    {
+        return k0.mCommandPath == k1.mCommandPath && k0.mStatusResponse == k1.mStatusResponse &&
+            k0.mChangedAttributes == k1.mChangedAttributes;
+    }
+};
+
+class DefaultValuesGenerator
+{
+public:
+    DefaultValuesGenerator()
+    {
+        const uint64_t float1 = 0x3f80000000000000; // 1.0 float
+        const uint64_t smallestDouble =
+            0x3e00000000000001; // Smallest double precision float greater than 32-bit representable float
+
+        std::pair<TLV::TLVType, uint8_t> key = { TLV::TLVType::kTLVType_ByteString, 4 };
+        kDefaultValues[key].resize((UINT32_MAX >> 16) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key = { TLV::TLVType::kTLVType_ByteString, 2 };
+        kDefaultValues[key].resize((UINT32_MAX >> 24) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key = { TLV::TLVType::kTLVType_ByteString, 1 };
+        kDefaultValues[key].resize((UINT8_MAX - 1) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key                 = { TLV::TLVType::kTLVType_FloatingPointNumber, 8 };
+        kDefaultValues[key] = "d:" + std::to_string(*reinterpret_cast<const double *>(&smallestDouble));
+
+        key                 = { TLV::TLVType::kTLVType_FloatingPointNumber, 4 };
+        kDefaultValues[key] = "f:" + std::to_string(*reinterpret_cast<const float *>(&float1));
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 8 };
+        kDefaultValues[key] = "s:" + std::to_string(INT64_MAX >> 32);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 4 };
+        kDefaultValues[key] = "s:" + std::to_string(INT32_MAX >> 16);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 2 };
+        kDefaultValues[key] = "s:" + std::to_string(INT16_MAX >> 8);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 1 };
+        kDefaultValues[key] = "s:127";
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 8 };
+        kDefaultValues[key] = std::to_string(UINT64_MAX >> 32);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 4 };
+        kDefaultValues[key] = std::to_string(UINT32_MAX >> 16);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 2 };
+        kDefaultValues[key] = std::to_string(UINT16_MAX >> 8);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 1 };
+        kDefaultValues[key] = "255";
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 4 };
+        kDefaultValues[key].resize(UINT32_MAX >> 16, 'a');
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 2 };
+        kDefaultValues[key].resize(UINT32_MAX >> 24, 'a');
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 1 };
+        kDefaultValues[key].resize(UINT8_MAX, 'a');
+    }
+
+    static DefaultValuesGenerator & GetInstance()
+    {
+        static DefaultValuesGenerator instance;
+        return instance;
+    }
+
+    std::string GetDefaultValue(const std::pair<TLV::TLVType, uint8_t> & key) { return kDefaultValues[key]; }
+
+private:
+    std::unordered_map<std::pair<TLV::TLVType, uint8_t>, std::string, MapKeyHasher> kDefaultValues;
+};
+} // namespace utils
+
+using AnyType                = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
 inline AnyType kInvalidValue = std::monostate();
 
-inline void Indent(size_t indent)
-{
-    for (size_t i = 0; i < indent; i++)
-    {
-        std::cout << " ";
-    }
-}
+void Indent(size_t indent);
+std::string GetElapsedTime(std::chrono::steady_clock::time_point startTime);
+void PrintStatusLine(std::chrono::steady_clock::time_point startTime, std::atomic<uint32_t> & currentTest, uint32_t totalTests,
+                     CHIP_ERROR lastStatusResponse, const OracleStatus & oracleStatus);
+bool IsManufacturerSpecificTestingCluster(ClusterId cluster);
 
-inline bool IsManufacturerSpecificTestingCluster(ClusterId cluster)
-{
-    /**
-     * Standard clusters are in range 0x0000_0000 - 0x0007_FFFF.
-     * Manufacturer-specific clusters are in range 0x0001_XXXX - 0xFFF4_YYYY, where XXXX >= FC00 and YYYY <= FFFE.
-     * Valid mnufacturer-specific clusters IDs ranging from 0xFFF1_0000 to 0xFFF4_FFFE are reserved to testing.
-     */
-    uint32_t manufacturerCode        = cluster & 0xFFFF0000;
-    uint32_t manufacturerProductCode = cluster & 0x0000FFFE;
-    return manufacturerCode >= 0xFFF10000 && manufacturerCode <= 0xFFF4FFFE && manufacturerProductCode >= 0xFC00;
-}
-
-const std::vector<std::pair<TLVType, uint8_t>> supportedTypes{ { TLVType::kTLVType_Array, 0 },
-                                                               { TLVType::kTLVType_Boolean, 0 },
-                                                               { TLVType::kTLVType_ByteString, 1 },
-                                                               { TLVType::kTLVType_ByteString, 2 },
-                                                               { TLVType::kTLVType_ByteString, 4 },
-                                                               { TLVType::kTLVType_ByteString, 8 },
-                                                               { TLVType::kTLVType_FloatingPointNumber, 4 },
-                                                               { TLVType::kTLVType_FloatingPointNumber, 8 },
-                                                               { TLVType::kTLVType_List, 0 },
-                                                               { TLVType::kTLVType_Null, 0 },
-                                                               { TLVType::kTLVType_Structure, 0 },
-                                                               { TLVType::kTLVType_SignedInteger, 1 },
-                                                               { TLVType::kTLVType_SignedInteger, 2 },
-                                                               { TLVType::kTLVType_SignedInteger, 4 },
-                                                               { TLVType::kTLVType_SignedInteger, 8 },
-                                                               { TLVType::kTLVType_UnsignedInteger, 1 },
-                                                               { TLVType::kTLVType_UnsignedInteger, 2 },
-                                                               { TLVType::kTLVType_UnsignedInteger, 4 },
-                                                               { TLVType::kTLVType_UnsignedInteger, 8 },
-                                                               { TLVType::kTLVType_UTF8String, 1 },
-                                                               { TLVType::kTLVType_UTF8String, 2 },
-                                                               { TLVType::kTLVType_UTF8String, 4 },
-                                                               { TLVType::kTLVType_UTF8String, 8 } };
+const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes{
+    { TLV::TLVType::kTLVType_Array, 0 },
+    { TLV::TLVType::kTLVType_Boolean, 0 },
+    { TLV::TLVType::kTLVType_ByteString, 8 },
+    { TLV::TLVType::kTLVType_ByteString, 4 },
+    { TLV::TLVType::kTLVType_ByteString, 2 },
+    { TLV::TLVType::kTLVType_ByteString, 1 },
+    { TLV::TLVType::kTLVType_FloatingPointNumber, 8 },
+    { TLV::TLVType::kTLVType_FloatingPointNumber, 4 },
+    { TLV::TLVType::kTLVType_List, 0 },
+    { TLV::TLVType::kTLVType_Null, 0 },
+    { TLV::TLVType::kTLVType_Structure, 0 },
+    { TLV::TLVType::kTLVType_SignedInteger, 8 },
+    { TLV::TLVType::kTLVType_SignedInteger, 4 },
+    { TLV::TLVType::kTLVType_SignedInteger, 2 },
+    { TLV::TLVType::kTLVType_SignedInteger, 1 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 8 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 4 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 2 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 1 },
+    { TLV::TLVType::kTLVType_UTF8String, 8 },
+    { TLV::TLVType::kTLVType_UTF8String, 4 },
+    { TLV::TLVType::kTLVType_UTF8String, 2 },
+    { TLV::TLVType::kTLVType_UTF8String, 1 },
+};
 } // namespace fuzzing
 } // namespace chip
