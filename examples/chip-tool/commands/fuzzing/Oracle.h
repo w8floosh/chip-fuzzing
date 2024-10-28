@@ -38,31 +38,20 @@ public:
     };
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command) :
-        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::nullopt)
-    {
-        mExpectedStatuses.push_back(IMStatus::Success);
-        mExpectedStatuses.push_back(IMStatus::Failure);
-        mExpectedStatuses.push_back(IMStatus::InvalidCommand);
-        mExpectedStatuses.push_back(IMStatus::ConstraintError);
-    };
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::nullopt) {};
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command, ExtraArgs && extraArgs) :
-        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::move(extraArgs))
-    {
-        mExpectedStatuses.push_back(IMStatus::InvalidCommand);
-        mExpectedStatuses.push_back(IMStatus::ConstraintError);
-        mExpectedStatuses.push_back(IMStatus::Success);
-        mExpectedStatuses.push_back(IMStatus::Failure);
-    };
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::move(extraArgs)) {};
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-               std::vector<IMStatus> && expectedStatuses) :
+               std::unordered_set<IMStatus> && expectedStatuses) :
         mEndpointId(endpoint), mClusterId(cluster), mSubjectId(attribute), mIsCommand(false), mExtraArgs(std::nullopt),
-        mExpectedStatuses(std::move(expectedStatuses))
-    {
-        mExpectedStatuses.push_back(IMStatus::Success);
-        mExpectedStatuses.push_back(IMStatus::Failure);
-    };
+        mExpectedStatuses(std::move(expectedStatuses)) {};
+
+    OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+               std::unordered_set<IMStatus> && expectedStatuses, ExtraArgs && extraArgs) :
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(attribute), mIsCommand(false), mExtraArgs(extraArgs),
+        mExpectedStatuses(std::move(expectedStatuses)) {};
 
     OracleRule & operator=(const OracleRule &) = default;
 
@@ -115,7 +104,7 @@ private:
     const uint32_t mSubjectId;
     const bool mIsCommand;
     const std::optional<ExtraArgs> mExtraArgs;
-    std::vector<IMStatus> mExpectedStatuses;
+    std::unordered_set<IMStatus> mExpectedStatuses;
 };
 
 /**
@@ -156,12 +145,13 @@ public:
                              const IMStatus & receivedStatus);
     void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command);
     void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-             std::vector<IMStatus> && expectedStatuses);
+             std::unordered_set<IMStatus> && expectedStatuses);
+    void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+             std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs);
 
 private:
     std::unordered_map<utils::OracleRuleMapKey, OracleRule, utils::MapKeyHasher, utils::MapKeyEqualizer> mRuleMap;
-
-    static const OracleRule mInvalidRule;
+    static const OracleRule kInvalidRule;
 };
 
 /**
@@ -189,9 +179,14 @@ public:
         mRuleMap.Add(endpoint, cluster, command);
     }
     void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-                 std::vector<IMStatus> && expectedStatuses)
+                 std::unordered_set<IMStatus> && expectedStatuses)
     {
         mRuleMap.Add(endpoint, cluster, attribute, std::move(expectedStatuses));
+    }
+    void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
+                 std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs)
+    {
+        mRuleMap.Add(endpoint, cluster, attribute, std::move(expectedStatuses), std::move(extraArgs));
     }
 
 private:

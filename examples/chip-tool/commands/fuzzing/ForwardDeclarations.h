@@ -60,6 +60,7 @@ struct MapKeyEqualizer;
 struct SetKeyHasher;
 
 struct FuzzerObservation;
+class DefaultValueGenerator;
 static const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes;
 } // namespace utils
 

@@ -35,15 +35,15 @@ public:
     {
 
         // Initializing fuzzing options, taking the following arguments from command line
-        AddArgument(
-            "destination-id", 0, UINT64_MAX, &mDestinationId,
-            "64-bit node or group identifier.\n  Group identifiers are detected by being in the 0xFFFF'FFFF'FFFF'xxxx range.");
-        AddArgument("generation", &mGenerationFuncArgument, "Input generation function (seed-only, ...)");
-        AddArgument("seed-path", &mSeedDirectoryArgument,
-                    "Path where to read fuzzer seeds from and where to save correct commands");
+        AddArgument("destination-id", 0, UINT64_MAX, &mDestinationId,
+                    "64-bit node or group identifier.\n  Group identifiers are detected by being in the 0xFFFF'FFFF'FFFF'xxxx "
+                    "range. Group fuzzing is not yet supported.");
+        AddArgument("tests", 0U, UINT32_MAX, &mTests, "Number of test cases to run the fuzzer for");
         AddArgument("output-path", &mOutputDirectoryArgument,
-                    "Path where to export stateful fuzzer logs. Enables stateful fuzzing");
-        AddArgument("iterations", 0U, UINT32_MAX, &mIterations, "Number of iterations (commands) to run the fuzzer for");
+                    "Output path for saving fuzzer data, including device grammar files, test cases and temporary files.");
+        // AddArgument("generation", &mGenerationFuncArgument, "Input generation function (seed-only, ...)");
+        // AddArgument("seed-path", &mSeedDirectoryArgument,
+        //             "Path where to read fuzzer seeds from and where to save correct commands");
     }
 
     /////////// CHIPCommand Interface /////////
@@ -51,19 +51,19 @@ public:
 
 private:
     chip::NodeId mDestinationId;
-    char * mGenerationFuncArgument;
-    char * mSeedDirectoryArgument;
-    chip::Optional<char *> mOutputDirectoryArgument = chip::NullOptional;
-    chip::Optional<uint32_t> mIterations            = chip::Optional<uint32_t>::Value(1000U);
+    uint32_t mTests                    = 1000U;
+    bool mDestinationSupportsTCPServer = false;
 
-    bool mStatefulFuzzingEnabled = false;
-    fs::path mSeedDirectory;
+    char * mOutputDirectoryArgument;
     chip::Optional<fs::path> mOutputDirectory = chip::NullOptional;
 
     CHIP_ERROR InitializeFuzzer();
-
-    CHIP_ERROR AcquireRemoteDataModel(chip::NodeId node);
-    CHIP_ERROR AcquireBasicInformation(chip::NodeId node);
-    void AddOracleRules(chip::NodeId node);
-    const char * GenerateCommand(chip::ClusterId cluster);
+    CHIP_ERROR AcquireRemoteDataModel();
+    CHIP_ERROR AcquireBasicInformation();
+    bool TestTCPServerSupport();
+    CHIP_ERROR SubscribeAttributesAndEvents();
+    CHIP_ERROR DeduceExpectedErrors(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
+                                    std::unordered_set<chip::Protocols::InteractionModel::Status> & errors,
+                                    chip::Optional<fs::path> dependencyTestFile = chip::NullOptional);
+    CHIP_ERROR AddOracleRules(chip::Optional<fs::path> dependencyTestFile);
 };

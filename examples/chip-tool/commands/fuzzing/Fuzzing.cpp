@@ -20,8 +20,6 @@ void fuzz::CallbackInterceptor::AnalyzeCommandResponse(chip::TLV::TLVReader * da
         output->content = ContainerType();
         helper.Decode(output);
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
-        // // TODO: To modify the local device state, we process the subscription response
-        // // TODO: [DISCLAIMER] We assume the request-response-subscription_response flow is synchronous (in this order)
     }
 
     mOracle.Consume(path.mEndpointId, path.mClusterId, path.mCommandId, true, status);
@@ -150,7 +148,8 @@ CHIP_ERROR fuzz::FuzzerContextManager::Update(chip::Optional<bool> waitingForRes
     {
         mContext->waitingForSubscriptionData = waitingForSubscriptionData.Value();
         if (mContext->waitingForSubscriptionData && mContext->commandPath.HasValue() &&
-            !mStateMonitor.HasExceededSubscriptionTimeoutsLimit(mContext->commandPath.Value()))
+            !mStateMonitor.HasExceededSubscriptionTimeoutsLimit(mContext->commandPath.Value()) &&
+            mFuzzerPhase == FuzzerPhase::TESTING)
             mContext->needsSubscriptionData = true;
     }
     ChipLogProgress(chipFuzzer, "New context flags state: [res: %d, sub: %d]", *mContext->waitingForResponse,

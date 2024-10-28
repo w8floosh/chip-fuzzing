@@ -420,10 +420,8 @@
                 "fuzzing",
                 "start",
                 "0xb",
-                "seed-only",
-                "seeds",
-                "--iterations",
-                "1000"
+                "1000",
+                "out/debug/standalone/chip-fuzzer"
             ],
             "env": {
                 "CONDA_PREFIX": "${env:HOME}/.conda/envs/matter",
