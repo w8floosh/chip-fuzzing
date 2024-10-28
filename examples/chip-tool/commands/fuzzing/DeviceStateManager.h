@@ -217,6 +217,21 @@ public:
      */
     CHIP_ERROR Load(fs::path src);
 
+    /**
+     * @brief Returns the number of (endpoint, cluster, command) paths in the device state.
+     */
+    size_t GetTotalCommands();
+
+    /**
+     * @brief Returns the number of (endpoint, cluster, attribute) paths in the device state.
+     */
+    size_t GetTotalAttributes();
+
+    /**
+     * @brief Returns the total number of paths in the device state.
+     */
+    size_t GetTotalPaths() { return GetTotalCommands() + GetTotalAttributes(); }
+
 private:
     DeviceState mDeviceState;
     fs::path mDumpDirectory;

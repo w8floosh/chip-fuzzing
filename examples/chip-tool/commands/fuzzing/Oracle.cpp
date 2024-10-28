@@ -32,14 +32,14 @@ const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip
     return mCurrentStatus;
 }
 
-const fuzz::OracleRule fuzz::OracleRuleMap::mInvalidRule = OracleRule(kInvalidEndpointId, kInvalidClusterId, kInvalidCommandId);
+const fuzz::OracleRule fuzz::OracleRuleMap::kInvalidRule = OracleRule(kInvalidEndpointId, kInvalidClusterId, kInvalidCommandId);
 
 const fuzz::OracleResult fuzz::OracleRuleMap::Query(chip::EndpointId endpoint, chip::ClusterId cluster, uint32_t subject,
                                                     bool isCommand, const IMStatus & receivedStatus)
 {
     key_t key(endpoint, cluster, subject, isCommand);
     auto rule = mRuleMap.find(key);
-    VerifyOrReturnValue(rule != mRuleMap.end(), OracleResult(mInvalidRule, false));
+    VerifyOrReturnValue(rule != mRuleMap.end(), OracleResult(kInvalidRule, false));
     return OracleResult(rule->second, receivedStatus);
 }
 
@@ -49,10 +49,19 @@ void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster
     key_t key(endpoint, cluster, command, true);
     VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command)).second);
 }
-void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-                              std::vector<IMStatus> && expectedStatuses)
+void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
+                              std::unordered_set<IMStatus> && expectedStatuses)
 {
-    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && attribute != kInvalidAttributeId);
-    key_t key(endpoint, cluster, attribute, false);
-    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, attribute, std::move(expectedStatuses))).second);
+    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && command != kInvalidCommandId);
+    key_t key(endpoint, cluster, command, true);
+    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, std::move(expectedStatuses))).second);
+}
+
+void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
+                              std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs)
+{
+    VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && command != kInvalidCommandId);
+    key_t key(endpoint, cluster, command, true);
+    VerifyOrDie(
+        mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, std::move(expectedStatuses), std::move(extraArgs))).second);
 }

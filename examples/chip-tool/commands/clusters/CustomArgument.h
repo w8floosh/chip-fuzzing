@@ -294,7 +294,11 @@ public:
     static constexpr bool kIsFabricScoped = false;
 
 private:
-    uint8_t * mData                       = nullptr;
-    uint32_t mDataLen                     = 0;
+    uint8_t * mData   = nullptr;
+    uint32_t mDataLen = 0;
+#if CONFIG_USE_BLACKBOX_FUZZING
+    static constexpr uint32_t mDataMaxLen = UINT32_MAX;
+#else
     static constexpr uint32_t mDataMaxLen = 4096;
+#endif
 };

@@ -14,6 +14,14 @@ class FuzzingStartCommand;
 namespace chip {
 
 namespace fuzzing {
+
+enum class FuzzerPhase : uint8_t
+{
+    INITIALIZATION,
+    ACQUISITION,
+    EXPLORATION,
+    TESTING
+};
 class StateMonitor
 {
 public:
@@ -113,7 +121,7 @@ class FuzzerContextManager
 {
 public:
     FuzzerContextManager() = delete;
-    FuzzerContextManager(StateMonitor & pm) : mStateMonitor(pm) {}
+    FuzzerContextManager(StateMonitor & pm, FuzzerPhase & phaseRef) : mStateMonitor(pm), mFuzzerPhase(phaseRef) {}
 
     void Initialize(std::condition_variable * cv, std::mutex * mutex, bool * waitingForResponse);
     CHIP_ERROR Update(CHIP_ERROR * err);
@@ -169,6 +177,7 @@ private:
     FuzzerContext * mContext = nullptr;
     std::mutex mContextManagerMutex;
     StateMonitor & mStateMonitor;
+    FuzzerPhase & mFuzzerPhase;
 };
 
 class CallbackInterceptor
@@ -220,7 +229,7 @@ private:
 class Fuzzer
 {
 public:
-    const char * GenerateCommand() { return mGenerationFunc(mSeedsDirectory); }
+    // const char * GenerateCommand() { return mGenerationFunc(mSeedsDirectory); }
     static Fuzzer * GetInstance(std::function<Fuzzer()> * init = nullptr)
     {
         static Fuzzer f{ (*init)() };
@@ -228,12 +237,13 @@ public:
     }
 
     DeviceStateManager * GetDeviceStateManager() { return &mDeviceStateManager; }
-    FuzzerContextManager * GetContextManager() { return &mContextManager; };
+    FuzzerContextManager * GetContextManager() { return &mContextManager; }
     CallbackInterceptor * GetCallbackInterceptor() { return &mCallbackInterceptor; }
     StateMonitor * GetStateMonitor() { return &mStateMonitor; }
     Oracle * GetOracle() { return &mOracle; }
+    FuzzerPhase CurrentPhase() { return mCurrentPhase; }
 
-protected:
+private:
     // FuzzingStartCommand must be a friend class as it is the only allowed to instantiate the Fuzzer class.
     friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
@@ -247,6 +257,37 @@ protected:
     fs::path mSeedsDirectory;
     Optional<fs::path> mOutputDirectory = NullOptional;
     Optional<fs::path> mHistoryPath     = NullOptional;
+    // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
+    // May be used to extend the fuzzer to use diverse generation methods aside the default one (Grammarinator).
+    std::function<const char *(fs::path)> mGenerationFunc;
+    NodeId mCurrentDestination;
+    std::vector<CommandHistoryEntry> mCommandHistory;
+    FuzzerPhase mCurrentPhase = FuzzerPhase::INITIALIZATION;
+
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
+        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
+        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
+    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
+           fs::path outputDirectory) :
+        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
+        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
+        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst)
+    {
+        mOutputDirectory.SetValue(outputDirectory);
+    };
+    Fuzzer(NodeId dst, fs::path outputDirectory) :
+        mDeviceStateManager(outputDirectory / "statedumps"), mOracle(mStateMonitor),
+        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
+        mCurrentDestination(dst)
+    {
+        mOutputDirectory.SetValue(outputDirectory);
+    };
+
+    Fuzzer(const Fuzzer &)                 = delete;
+    Fuzzer(Fuzzer &&) noexcept             = delete;
+    Fuzzer & operator=(const Fuzzer &)     = delete;
+    Fuzzer & operator=(Fuzzer &&) noexcept = delete;
 
     static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
                            fs::path dumpDirectory)
@@ -264,6 +305,11 @@ protected:
         };
         GetInstance(&init);
     }
+    static void Initialize(NodeId dst, fs::path outputDirectory)
+    {
+        std::function<Fuzzer()> init = [dst, outputDirectory]() { return Fuzzer(dst, outputDirectory); };
+        GetInstance(&init);
+    }
 
     CHIP_ERROR ExportSeedToFile(const char * command, const chip::app::ConcreteClusterPath & dataModelPath);
     CHIP_ERROR AppendToHistory(const char * command, CHIP_ERROR statusResponse)
@@ -271,32 +317,13 @@ protected:
         mCommandHistory.push_back(CommandHistoryEntry{ std::string(command), statusResponse, mOracle.GetCurrentStatus() });
         return CHIP_NO_ERROR;
     }
-
-private:
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
-        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
-        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor),
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
-           fs::path outputDirectory) :
-        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
-        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor),
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst)
+    void GoToNextPhase()
     {
-        mOutputDirectory.SetValue(outputDirectory);
-    };
-    Fuzzer(const Fuzzer &)                 = delete;
-    Fuzzer(Fuzzer &&) noexcept             = delete;
-    Fuzzer & operator=(const Fuzzer &)     = delete;
-    Fuzzer & operator=(Fuzzer &&) noexcept = delete;
-
-    // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
-    // May be used to extend the fuzzer to use diverse generation methods aside the default one (Grammarinator).
-    std::function<const char *(fs::path)> mGenerationFunc;
-    NodeId mCurrentDestination;
-    std::vector<CommandHistoryEntry> mCommandHistory;
+        VerifyOrReturn(mCurrentPhase != FuzzerPhase::TESTING);
+        mCurrentPhase = static_cast<FuzzerPhase>((static_cast<uint8_t>(mCurrentPhase) + 1) % 3);
+    }
 };
 
-std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
+// std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
 } // namespace fuzzing
 } // namespace chip
