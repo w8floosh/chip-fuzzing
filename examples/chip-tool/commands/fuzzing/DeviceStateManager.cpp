@@ -1,6 +1,8 @@
 #include "DeviceStateManager.h"
 #include "Visitors.h"
 #include "tlv/DecodedTLVElement.h"
+#include <app-common/zap-generated/ids/Attributes.h>
+#include <app-common/zap-generated/ids/Clusters.h>
 #include <fstream>
 // This header has exception handling code that is not compatible with -fno-exceptions (see BUILD.gn)
 #include <yaml-cpp/yaml.h>
@@ -436,4 +438,52 @@ CHIP_ERROR fuzz::DeviceStateManager::Load(fs::path src)
         }
     }
     return CHIP_NO_ERROR;
+}
+
+size_t fuzz::DeviceStateManager::GetTotalCommands()
+{
+    size_t totalCommands = 0;
+    for (const auto & [nodeId, nodeState] : *List())
+    {
+        for (const auto & [endpointId, endpointState] : *List(nodeId))
+        {
+            for (const auto & [clusterId, clusterState] : *List(nodeId, endpointId))
+            {
+                auto commandListObj =
+                    (*List(nodeId, endpointId, clusterId))[chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id]
+                        .ReadCurrent();
+                if (!std::holds_alternative<ContainerType>(commandListObj))
+                {
+                    continue;
+                }
+                auto commandList = std::get<ContainerType>(commandListObj);
+                totalCommands += commandList.size();
+            }
+        }
+    }
+    return totalCommands;
+}
+
+size_t fuzz::DeviceStateManager::GetTotalAttributes()
+{
+    size_t totalAttributes = 0;
+    for (const auto & [nodeId, nodeState] : *List())
+    {
+        for (const auto & [endpointId, endpointState] : *List(nodeId))
+        {
+            for (const auto & [clusterId, clusterState] : *List(nodeId, endpointId))
+            {
+                auto attributeListObj =
+                    (*List(nodeId, endpointId, clusterId))[chip::app::Clusters::Globals::Attributes::AttributeList::Id]
+                        .ReadCurrent();
+                if (!std::holds_alternative<ContainerType>(attributeListObj))
+                {
+                    continue;
+                }
+                auto attributeList = std::get<ContainerType>(attributeListObj);
+                totalAttributes += attributeList.size();
+            }
+        }
+    }
+    return totalAttributes;
 }

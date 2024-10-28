@@ -22,22 +22,22 @@
 
 [1mChecking the environment:[0m
 
-20241020 18:50:42 WRN Current uname (6.11.3-arch1-1 #1 SMP PREEMPT_DYNAMIC Thu, 10 Oct 2024 20:11:06 +0000 x86_64) does not match Bootstrap uname (6.6.52-1-lts #1 SMP PREEMPT_DYNAMIC Wed, 18 Sep 2024 19:02:04 +0000 x86_64), you may need to rerun bootstrap on this system
-20241020 18:50:42 INF Environment passes all checks!
+20241027 23:57:47 WRN Current uname (6.11.5-arch1-1 #1 SMP PREEMPT_DYNAMIC Tue, 22 Oct 2024 18:31:38 +0000 x86_64) does not match Bootstrap uname (6.6.52-1-lts #1 SMP PREEMPT_DYNAMIC Wed, 18 Sep 2024 19:02:04 +0000 x86_64), you may need to rerun bootstrap on this system
+20241027 23:57:47 INF Environment passes all checks!
 
 [1mEnvironment looks good, you are ready to go![0m
 
 + env
 SHELL=/bin/bash
-SESSION_MANAGER=local/martin-fx505dt:@/tmp/.ICE-unix/904,unix/martin-fx505dt:/tmp/.ICE-unix/904
+SESSION_MANAGER=local/martin-fx505dt:@/tmp/.ICE-unix/866,unix/martin-fx505dt:/tmp/.ICE-unix/866
 COLORTERM=truecolor
 XDG_CONFIG_DIRS=/home/w8floosh/.config/kdedefaults:/etc/xdg
-XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session2
+XDG_SESSION_PATH=/org/freedesktop/DisplayManager/Session1
 XDG_MENU_PREFIX=plasma-
 TERM_PROGRAM_VERSION=1.92.1
 CONDA_EXE=/home/w8floosh/miniforge3/bin/conda
 _CE_M=
-ICEAUTHORITY=/run/user/1000/iceauth_zadTkb
+ICEAUTHORITY=/run/user/1000/iceauth_bMiKpQ
 LANGUAGE=
 LC_ADDRESS=it_IT.UTF-8
 LC_NAME=it_IT.UTF-8
@@ -58,8 +58,8 @@ XDG_SESSION_DESKTOP=KDE
 CONDA_ROOT=/usr
 XDG_SESSION_TYPE=x11
 CONDA_PREFIX=/home/w8floosh/.conda/envs/matter
-SYSTEMD_EXEC_PID=969
-XAUTHORITY=/tmp/xauth_NGMDSs
+SYSTEMD_EXEC_PID=924
+XAUTHORITY=/tmp/xauth_RWCHUA
 VSCODE_GIT_ASKPASS_NODE=/opt/visual-studio-code/code
 CIPD_CACHE_DIR=/home/w8floosh/.cipd-cache-dir
 MOTD_SHOWN=pam
@@ -74,8 +74,8 @@ MEMORY_PRESSURE_WATCH=/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.servic
 CONDA_PROMPT_MODIFIER=(matter) 
 GIT_ASKPASS=/opt/visual-studio-code/resources/app/extensions/git/dist/askpass.sh
 XDG_SEAT_PATH=/org/freedesktop/DisplayManager/Seat0
-INVOCATION_ID=ba1f591c97034a61bfb9b65097069044
-MANAGERPID=802
+INVOCATION_ID=14828b781636447d842c8384b89ed114
+MANAGERPID=754
 PW_PYTHON_CIPD_INSTALL_DIR=/home/w8floosh/GitHub/chip-fuzzing/.environment/cipd/packages/python
 CHROME_DESKTOP=code-url-handler.desktop
 _PW_ROSETTA=0
@@ -112,7 +112,7 @@ NVCC_CCBIN=/usr/bin/g++-13
 LC_TIME=it_IT.UTF-8
 VSCODE_GIT_ASKPASS_MAIN=/opt/visual-studio-code/resources/app/extensions/git/dist/askpass-main.js
 QT_AUTO_SCREEN_SCALE_FACTOR=0
-JOURNAL_STREAM=9:10456
+JOURNAL_STREAM=9:6007
 KDE_FULL_SESSION=true
 GDK_BACKEND=x11
 BROWSER=firefox
@@ -129,11 +129,11 @@ OLDPWD=/home/w8floosh/GitHub/chip-fuzzing
 TERM_PROGRAM=vscode
 _=/usr/bin/env
 + gn gen --check --fail-on-unused-args --root=examples/chip-tool out/debug/standalone --args=
-Done. Made 3667 targets from 301 files in 370ms
+Done. Made 3667 targets from 301 files in 507ms
 + ninja -C out/debug/standalone
 ninja: Entering directory `out/debug/standalone'
 [0/1] Regenerating ninja files
-[1/4] c++ obj/commands/fuzzing/chip-tool-utils.Fuzzing.cpp.o
+[1/4] c++ obj/commands/fuzzing/chip-tool-utils.FuzzingCommands.cpp.o
 [2/4] ar chip-tool-utils.a
 [3/4] ld ./chip-tool
 [4/4] stamp obj/default.stamp

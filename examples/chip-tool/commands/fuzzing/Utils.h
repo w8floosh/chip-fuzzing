@@ -59,6 +59,11 @@ struct MapKeyHasher
             std::hash<chip::CommandId>{}(path.mCommandId);
     }
 
+    std::size_t operator()(const std::pair<TLV::TLVType, uint8_t> & key) const
+    {
+        return std::hash<int16_t>{}(static_cast<int16_t>(key.first)) ^ std::hash<uint8_t>{}(key.second);
+    }
+
     std::size_t operator()(const FuzzerObservation & k) const
     {
         std::vector<uint64_t> dataAttributePathSetSums(k.mChangedAttributes.size());
@@ -90,6 +95,78 @@ struct MapKeyEqualizer
     }
 };
 
+class DefaultValuesGenerator
+{
+public:
+    DefaultValuesGenerator()
+    {
+        const uint64_t float1 = 0x3f80000000000000; // 1.0 float
+        const uint64_t smallestDouble =
+            0x3e00000000000001; // Smallest double precision float greater than 32-bit representable float
+
+        std::pair<TLV::TLVType, uint8_t> key = { TLV::TLVType::kTLVType_ByteString, 4 };
+        kDefaultValues[key].resize((UINT32_MAX >> 16) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key = { TLV::TLVType::kTLVType_ByteString, 2 };
+        kDefaultValues[key].resize((UINT32_MAX >> 24) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key = { TLV::TLVType::kTLVType_ByteString, 1 };
+        kDefaultValues[key].resize((UINT8_MAX - 1) << 1, 'F');
+        kDefaultValues[key].insert(0, "hex:");
+
+        key                 = { TLV::TLVType::kTLVType_FloatingPointNumber, 8 };
+        kDefaultValues[key] = "d:" + std::to_string(*reinterpret_cast<const double *>(&smallestDouble));
+
+        key                 = { TLV::TLVType::kTLVType_FloatingPointNumber, 4 };
+        kDefaultValues[key] = "f:" + std::to_string(*reinterpret_cast<const float *>(&float1));
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 8 };
+        kDefaultValues[key] = "s:" + std::to_string(INT64_MAX >> 32);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 4 };
+        kDefaultValues[key] = "s:" + std::to_string(INT32_MAX >> 16);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 2 };
+        kDefaultValues[key] = "s:" + std::to_string(INT16_MAX >> 8);
+
+        key                 = { TLV::TLVType::kTLVType_SignedInteger, 1 };
+        kDefaultValues[key] = "s:127";
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 8 };
+        kDefaultValues[key] = std::to_string(UINT64_MAX >> 32);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 4 };
+        kDefaultValues[key] = std::to_string(UINT32_MAX >> 16);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 2 };
+        kDefaultValues[key] = std::to_string(UINT16_MAX >> 8);
+
+        key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 1 };
+        kDefaultValues[key] = "255";
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 4 };
+        kDefaultValues[key].resize(UINT32_MAX >> 16, 'a');
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 2 };
+        kDefaultValues[key].resize(UINT32_MAX >> 24, 'a');
+
+        key = { TLV::TLVType::kTLVType_UTF8String, 1 };
+        kDefaultValues[key].resize(UINT8_MAX, 'a');
+    }
+
+    static DefaultValuesGenerator & GetInstance()
+    {
+        static DefaultValuesGenerator instance;
+        return instance;
+    }
+
+    std::string GetDefaultValue(const std::pair<TLV::TLVType, uint8_t> & key) { return kDefaultValues[key]; }
+
+private:
+    std::unordered_map<std::pair<TLV::TLVType, uint8_t>, std::string, MapKeyHasher> kDefaultValues;
+};
 } // namespace utils
 
 using AnyType                = typename utils::ExtendedVariant<PrimitiveType, ContainerType>::type;
@@ -101,28 +178,30 @@ void PrintStatusLine(std::chrono::steady_clock::time_point startTime, std::atomi
                      CHIP_ERROR lastStatusResponse, const OracleStatus & oracleStatus);
 bool IsManufacturerSpecificTestingCluster(ClusterId cluster);
 
-const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes{ { TLV::TLVType::kTLVType_Array, 0 },
-                                                                    { TLV::TLVType::kTLVType_Boolean, 0 },
-                                                                    { TLV::TLVType::kTLVType_ByteString, 1 },
-                                                                    { TLV::TLVType::kTLVType_ByteString, 2 },
-                                                                    { TLV::TLVType::kTLVType_ByteString, 4 },
-                                                                    { TLV::TLVType::kTLVType_ByteString, 8 },
-                                                                    { TLV::TLVType::kTLVType_FloatingPointNumber, 4 },
-                                                                    { TLV::TLVType::kTLVType_FloatingPointNumber, 8 },
-                                                                    { TLV::TLVType::kTLVType_List, 0 },
-                                                                    { TLV::TLVType::kTLVType_Null, 0 },
-                                                                    { TLV::TLVType::kTLVType_Structure, 0 },
-                                                                    { TLV::TLVType::kTLVType_SignedInteger, 1 },
-                                                                    { TLV::TLVType::kTLVType_SignedInteger, 2 },
-                                                                    { TLV::TLVType::kTLVType_SignedInteger, 4 },
-                                                                    { TLV::TLVType::kTLVType_SignedInteger, 8 },
-                                                                    { TLV::TLVType::kTLVType_UnsignedInteger, 1 },
-                                                                    { TLV::TLVType::kTLVType_UnsignedInteger, 2 },
-                                                                    { TLV::TLVType::kTLVType_UnsignedInteger, 4 },
-                                                                    { TLV::TLVType::kTLVType_UnsignedInteger, 8 },
-                                                                    { TLV::TLVType::kTLVType_UTF8String, 1 },
-                                                                    { TLV::TLVType::kTLVType_UTF8String, 2 },
-                                                                    { TLV::TLVType::kTLVType_UTF8String, 4 },
-                                                                    { TLV::TLVType::kTLVType_UTF8String, 8 } };
+const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes{
+    { TLV::TLVType::kTLVType_Array, 0 },
+    { TLV::TLVType::kTLVType_Boolean, 0 },
+    { TLV::TLVType::kTLVType_ByteString, 8 },
+    { TLV::TLVType::kTLVType_ByteString, 4 },
+    { TLV::TLVType::kTLVType_ByteString, 2 },
+    { TLV::TLVType::kTLVType_ByteString, 1 },
+    { TLV::TLVType::kTLVType_FloatingPointNumber, 8 },
+    { TLV::TLVType::kTLVType_FloatingPointNumber, 4 },
+    { TLV::TLVType::kTLVType_List, 0 },
+    { TLV::TLVType::kTLVType_Null, 0 },
+    { TLV::TLVType::kTLVType_Structure, 0 },
+    { TLV::TLVType::kTLVType_SignedInteger, 8 },
+    { TLV::TLVType::kTLVType_SignedInteger, 4 },
+    { TLV::TLVType::kTLVType_SignedInteger, 2 },
+    { TLV::TLVType::kTLVType_SignedInteger, 1 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 8 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 4 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 2 },
+    { TLV::TLVType::kTLVType_UnsignedInteger, 1 },
+    { TLV::TLVType::kTLVType_UTF8String, 8 },
+    { TLV::TLVType::kTLVType_UTF8String, 4 },
+    { TLV::TLVType::kTLVType_UTF8String, 2 },
+    { TLV::TLVType::kTLVType_UTF8String, 1 },
+};
 } // namespace fuzzing
 } // namespace chip
