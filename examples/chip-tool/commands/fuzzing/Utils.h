@@ -173,9 +173,7 @@ using AnyType                = typename utils::ExtendedVariant<PrimitiveType, Co
 inline AnyType kInvalidValue = std::monostate();
 
 void Indent(size_t indent);
-std::string GetElapsedTime(std::chrono::steady_clock::time_point startTime);
-void PrintStatusLine(std::chrono::steady_clock::time_point startTime, std::atomic<uint32_t> & currentTest, uint32_t totalTests,
-                     CHIP_ERROR lastStatusResponse, const OracleStatus & oracleStatus);
+std::string GetElapsedTime(std::chrono::system_clock::time_point startTime);
 bool IsManufacturerSpecificTestingCluster(ClusterId cluster);
 
 const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes{

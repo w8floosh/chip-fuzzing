@@ -11,9 +11,9 @@ void chip::fuzzing::Indent(size_t indent)
     }
 }
 
-std::string chip::fuzzing::GetElapsedTime(std::chrono::steady_clock::time_point startTime)
+std::string chip::fuzzing::GetElapsedTime(std::chrono::system_clock::time_point startTime)
 {
-    auto now     = std::chrono::steady_clock::now();
+    auto now     = std::chrono::system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - startTime).count();
 
     int64_t hours   = elapsed / 3600;
@@ -25,24 +25,6 @@ std::string chip::fuzzing::GetElapsedTime(std::chrono::steady_clock::time_point 
         << std::setfill('0') << seconds;
 
     return oss.str();
-}
-
-void chip::fuzzing::PrintStatusLine(std::chrono::steady_clock::time_point startTime, std::atomic<uint32_t> & currentTest,
-                                    uint32_t totalTests, CHIP_ERROR lastStatusResponse, const OracleStatus & oracleStatus)
-{
-
-    std::cout << "\033[1;1H\033[2K"; // Move to top row and clear the line
-
-    // Set the background to orange and text to white
-    std::cout << "\033[37;43m";
-
-    // Print status line with the desired formatting
-    std::cout << " Test: " << currentTest << "/" << totalTests << " | Last command response: " << std::hex
-              << lastStatusResponse.AsInteger() << " | Oracle status: " << static_cast<uint8_t>(oracleStatus) << std::dec
-              << " | Elapsed: " << GetElapsedTime(startTime) << "\u001b[0m" << std::flush;
-
-    // Restore the cursor position
-    std::cout << "\033[1B\033[0J" << std::flush;
 }
 
 bool chip::fuzzing::IsManufacturerSpecificTestingCluster(ClusterId cluster)

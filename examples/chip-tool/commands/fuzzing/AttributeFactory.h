@@ -3,7 +3,6 @@
 #include "Utils.h"
 #include "Visitors.h"
 
-namespace DM = chip::app::DataModel;
 namespace chip {
 namespace fuzzing {
 
