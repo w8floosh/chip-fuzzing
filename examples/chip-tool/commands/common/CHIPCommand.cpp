@@ -30,6 +30,7 @@
 #include <platform/LockTracker.h>
 #include <thread>
 #if CONFIG_USE_BLACKBOX_FUZZING
+#include "../fuzzing/ForwardDeclarations.h"
 #include "../fuzzing/Fuzzing.h"
 #endif // CONFIG_USE_BLACKBOX_FUZZING
 

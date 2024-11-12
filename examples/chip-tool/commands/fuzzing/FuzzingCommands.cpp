@@ -5,6 +5,7 @@
 #include "Visitors.h"
 #include "editline.h"
 #include "generation/RuntimeGrammarManager.h"
+#include <app/MessageDef/StatusIB.h>
 #include <atomic>
 #include <cstring>
 #include <future>
@@ -233,12 +234,14 @@ void AddDefaultValueToPayload(Json::Value & payload, std::string id, chip::TLV::
 void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
 {
     CHIP_ERROR contextError = CHIP_NO_ERROR;
+    auto fuzzer             = fuzz::Fuzzer::GetInstance();
+    fuzzer->mCurrentCommand = command;
     *status                 = mHandler->RunFuzzing(command);
 
     VerifyOrReturn(CHIP_ERROR_INVALID_ARGUMENT != *status,
                    ChipLogError(chipFuzzer, "Could not parse command string correctly. Test case was skipped."));
 
-    auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
+    auto contextManager = fuzzer->GetContextManager();
     contextError        = contextManager->Finalize();
     if (CHIP_NO_ERROR != contextError)
     {
@@ -450,18 +453,19 @@ CHIP_ERROR FuzzingStartCommand::AddOracleRules(chip::Optional<fs::path> dependen
     auto fuzzer                            = fuzz::Fuzzer::GetInstance();
     fuzz::DeviceStateManager * deviceState = fuzzer->GetDeviceStateManager();
     fuzz::Oracle * oracle                  = fuzzer->GetOracle();
-    for (auto & endpoint : *deviceState->List(mDestinationId))
+    for (auto & [endpointId, _] : *deviceState->List(mDestinationId))
     {
-        for (auto & cluster : *deviceState->List(mDestinationId, endpoint.first))
+        for (auto & [clusterId, _] : *deviceState->List(mDestinationId, endpointId))
         {
             auto acceptedCommandList = std::get<fuzz::ContainerType>(deviceState->ReadAttribute(
-                mDestinationId, endpoint.first, cluster.first, chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id));
+                mDestinationId, endpointId, clusterId, chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id));
             for (auto & command : acceptedCommandList)
             {
-                auto commandId = chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(command);
-                std::unordered_set<IMStatus> errors({ IMStatus::Success });
-                DeduceExpectedErrors(endpoint.first, cluster.first, commandId, errors, dependencyTestFile);
-                oracle->AddRule(endpoint.first, cluster.first, commandId, std::move(errors));
+                auto commandId               = chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(command);
+                fuzzer->mCurrentAnalyzedPath = { chip::app::ConcreteCommandPath(endpointId, clusterId, commandId),
+                                                 { IMStatus::Success } };
+                DeduceExpectedErrors(endpointId, clusterId, commandId, fuzzer->mCurrentAnalyzedPath.second, dependencyTestFile);
+                oracle->AddRule(endpointId, clusterId, commandId, std::move(fuzzer->mCurrentAnalyzedPath.second));
             }
         }
     }
@@ -567,7 +571,7 @@ CHIP_ERROR FuzzingStartCommand::InitializeFuzzer()
         fs::create_directories(mOutputDirectoryArgument);
     }
     mOutputDirectory.SetValue(fs::path(mOutputDirectoryArgument));
-    fuzz::Fuzzer::Initialize(mDestinationId, mOutputDirectory.Value());
+    fuzz::Fuzzer::Initialize(mDestinationId, mOutputDirectory.Value(), mTests);
 
     VerifyOrReturnError(fuzz::Fuzzer::GetInstance() != nullptr, CHIP_FUZZER_ERROR_CORE_INITIALIZATION_FAILED);
     return CHIP_NO_ERROR;
@@ -619,46 +623,38 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
      */
     std::string generatedArgs;
 
-    // std::atomic<uint32_t> testIndex(1);
-    const auto startTime = std::chrono::steady_clock::now();
-    // std::atomic<bool> running(true);
-    // auto statusPrintFuture = std::async(std::launch::async, fuzz::PrintStatusLine, std::ref(running), startTime,
-    //                                     std::ref(testIndex), mTests.Value(), status,
-    //                                     fuzzer->mOracle->GetCurrentStatus());
-
     while (std::getline(file, generatedArgs))
     {
-        // fuzz::PrintStatusLine(startTime, testIndex, mTests.Value(), status, fuzzer->mOracle->GetCurrentStatus());
         std::string command = "any command-by-id ";
         command += PreprocessGeneratedArgs(mDestinationId, generatedArgs);
 
         ExecuteCommand(command.c_str(), &status);
         fuzzer->AppendToHistory(command.c_str(), status);
 
-        if (fuzzer->GetOracle()->GetCurrentStatus() == fuzz::OracleStatus::UNREACHABLE)
+        if (fuzzer->mOracle.GetCurrentStatus() == fuzz::OracleStatus::UNREACHABLE)
         {
             ChipLogError(chipFuzzer, "The node is unreachable or may have crashed.");
             finalStatus = CHIP_ERROR_UNEXPECTED_EVENT;
+            break;
         }
-        // ++testIndex;
+        fuzzer->mTestIndex++;
     }
-    // running = false;
-    // statusPrintFuture.wait();
-
-    // Clear the terminal
-    std::cout << "\033[2J\033[1;1H";
 
     if (finalStatus == CHIP_NO_ERROR)
     {
-        ChipLogProgress(chipFuzzer, "Fuzzing completed in %s.", fuzz::GetElapsedTime(startTime).c_str());
+        ChipLogProgress(chipFuzzer, "Fuzzing completed in %s. Dumping telemetry data...",
+                        fuzz::GetElapsedTime(fuzzer->mStateMonitor.GetStartTime()).c_str());
     }
     else
     {
         ChipLogError(chipFuzzer, "The fuzzer lost connection with the device. Please check the command history logs.");
     }
 
-    fuzzer->GetDeviceStateManager()->Dump(fuzzer->mCommandHistory);
-    ChipLogProgress(chipFuzzer, "The device state and command history were dumped in the statedumps folder.");
+    fuzzer->GetStateMonitor()->DumpTelemetry();
+    deviceStateManager->Dump(fuzzer->mCommandHistory);
+    ChipLogProgress(chipFuzzer, "Fuzzing telemetry and device state was dumped in the output folder.");
+    ChipLogProgress(chipFuzzer, "Cleaning up data allocated by the fuzzer...");
+    // fuzzer->Cleanup();
 
     SetCommandExitStatus(CHIP_NO_ERROR);
     return CHIP_NO_ERROR;

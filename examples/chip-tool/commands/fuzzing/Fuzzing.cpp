@@ -8,6 +8,56 @@
 #include <thread>
 
 namespace fuzz = chip::fuzzing;
+
+void fuzz::StateMonitor::DumpTelemetry()
+{
+    YAML::Emitter os;
+    auto started_ms = std::chrono::duration_cast<std::chrono::milliseconds>(mStartTime.time_since_epoch()).count();
+
+    os << YAML::BeginMap;
+    os << YAML::Key << "started" << YAML::Value << started_ms;
+    os << YAML::Key << "elapsed" << YAML::Value << fuzz::GetElapsedTime(mStartTime);
+    os << YAML::Key << "errors" << YAML::Value << YAML::BeginSeq;
+    for (auto & [err, totalCount] : mErrorCounters)
+    {
+        os << YAML::BeginMap;
+        os << YAML::Key << "code" << YAML::Value << YAML::Hex << err.AsInteger() << YAML::Dec;
+        os << YAML::Key << "total" << YAML::Value << totalCount;
+        os << YAML::Key << "expected" << YAML::Value << mExpectedErrorCounters[err];
+        os << YAML::Key << "unexpected" << YAML::Value << mUnexpectedErrorCounters[err];
+        os << YAML::EndMap;
+    }
+    os << YAML::EndSeq;
+    os << YAML::Key << "observations" << YAML::Value << YAML::BeginSeq;
+    for (auto & [obs, count] : mObservationCounters)
+    {
+        os << YAML::BeginMap;
+        os << YAML::Key << "path" << YAML::Value << YAML::BeginMap << YAML::Hex;
+        os << YAML::Key << "endpoint" << YAML::Value << obs.mCommandPath.mEndpointId;
+        os << YAML::Key << "cluster" << YAML::Value << obs.mCommandPath.mClusterId;
+        os << YAML::Key << "command" << YAML::Value << obs.mCommandPath.mCommandId << YAML::EndMap;
+
+        os << YAML::Key << "statusResponse" << YAML::Value << obs.mStatusResponse.AsInteger() << YAML::Dec;
+        os << YAML::Key << "changedAttributes" << YAML::Value << YAML::BeginSeq;
+        for (auto & path : obs.mChangedAttributes)
+        {
+            os << YAML::BeginMap;
+            os << YAML::Key << "endpoint" << YAML::Value << path.mEndpointId;
+            os << YAML::Key << "cluster" << YAML::Value << path.mClusterId;
+            os << YAML::Key << "attribute" << YAML::Value << path.mAttributeId;
+            os << YAML::EndMap;
+        }
+        os << YAML::EndMap;
+    }
+
+    os << YAML::EndSeq << YAML::EndMap;
+
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(mStartTime.time_since_epoch()).count();
+    std::string fileName(std::to_string(now_ms));
+    std::ofstream file(mDumpDirectory / (fileName + "_telemetry.txt"));
+    file << os.c_str();
+    file.close();
+}
 void fuzz::CallbackInterceptor::AnalyzeCommandResponse(chip::TLV::TLVReader * data, const chip::app::ConcreteCommandPath & path,
                                                        const chip::app::StatusIB & status)
 {
@@ -321,14 +371,10 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     return CHIP_NO_ERROR;
 }
 
-std::function<const char *(fs::path)> fuzz::ConvertStringToGenerationFunction(const char * key)
+void fuzz::Fuzzer::Cleanup()
 {
-    if (std::string(key).compare("seed-only") == 0)
-    {
-        return fuzz::generation::GenerateCommandSeedOnly;
-    }
-    else
-    {
-        return nullptr;
-    }
+    auto now    = std::chrono::system_clock::now();
+    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+    // mTerminalUIManager.Close(mOutputDirectory.Value() / "stats" / std::to_string(now_ms));
 }

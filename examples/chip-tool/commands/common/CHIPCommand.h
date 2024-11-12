@@ -22,11 +22,6 @@
 #include <controller/ExamplePersistentStorage.h>
 #endif // CONFIG_USE_LOCAL_STORAGE
 
-#if CONFIG_USE_BLACKBOX_FUZZING
-#include "../fuzzing/ForwardDeclarations.h"
-#include "../fuzzing/Fuzzing.h"
-#endif // CONFIG_USE_BLACKBOX_FUZZING
-
 #include "BDXDiagnosticLogsServerDelegate.h"
 #include "Command.h"
 

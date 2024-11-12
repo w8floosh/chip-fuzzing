@@ -1,5 +1,4 @@
 #pragma once
-#include "../clusters/DataModelLogger.h"
 #include "../common/CHIPCommand.h"
 #include "../common/Commands.h"
 #include "ForwardDeclarations.h"
@@ -7,6 +6,7 @@
 
 namespace fuzz = chip::fuzzing;
 namespace fs   = std::filesystem;
+using IMStatus = fuzz::IMStatus;
 class FuzzingCommand : public CHIPCommand
 {
 public:
@@ -63,7 +63,7 @@ private:
     bool TestTCPServerSupport();
     CHIP_ERROR SubscribeAttributesAndEvents();
     CHIP_ERROR DeduceExpectedErrors(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
-                                    std::unordered_set<chip::Protocols::InteractionModel::Status> & errors,
+                                    std::unordered_set<IMStatus> & errors,
                                     chip::Optional<fs::path> dependencyTestFile = chip::NullOptional);
     CHIP_ERROR AddOracleRules(chip::Optional<fs::path> dependencyTestFile);
 };

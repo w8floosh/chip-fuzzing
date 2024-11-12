@@ -1,8 +1,8 @@
 #pragma once
 #include "ForwardDeclarations.h"
 #include "Utils.h"
+#include <app/MessageDef/StatusIB.h>
 
-using IMStatus = chip::Protocols::InteractionModel::Status;
 namespace chip {
 namespace fuzzing {
 
@@ -11,10 +11,10 @@ namespace fuzzing {
  * @brief The OracleStatus enum represents the possible outcomes of the bug oracle's analysis.
  * The oracle status gives an insight into what went wrong with the device's behavior.
  */
-enum class OracleStatus : uint8_t
 // TODO: Create error description logs depending on the status
+enum class OracleStatus : uint8_t
 {
-    OK,                  // Observed status matches the expected one
+    SUCCESS,             // Observed status matches the expected one
     UNEXPECTED_RESPONSE, // Observed status doesn't match with expected one
     TIMEOUT,       // The device is either unresponsive or busy. Oracle transitions to this state when the device timeouts once
     UNREACHABLE,   // The device likely may have crashed. Oracle transitions to this state when the device timeouts while the oracle
@@ -133,7 +133,7 @@ struct OracleResult
     OracleResult & operator=(OracleResult &) = default;
     const OracleRule & usedRule;
     bool queryResult;
-    OracleStatus statusResult = OracleStatus::OK;
+    OracleStatus statusResult = OracleStatus::SUCCESS;
 };
 
 class OracleRuleMap

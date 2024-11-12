@@ -1,15 +1,23 @@
 #pragma once
-#include <app/tests/suites/commands/interaction_model/InteractionModel.h>
+#include <app/ConcreteAttributePath.h>
+#include <app/ConcreteCommandPath.h>
 #include <filesystem>
 #include <functional>
 #include <lib/core/CHIPCore.h>
 #include <lib/core/CHIPError.h>
+#include <lib/core/Optional.h>
+#include <lib/core/TLV.h>
 #include <optional>
+#include <protocols/interaction_model/Constants.h>
 #include <string>
+#include <unordered_set>
 #include <variant>
 
 namespace chip {
 namespace fuzzing {
+
+using IMStatus = chip::Protocols::InteractionModel::Status;
+
 namespace fs = std::filesystem;
 namespace TLV {
 using TLVType = chip::TLV::TLVType;
@@ -36,8 +44,8 @@ inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte);
 #define CHIP_FUZZER_ERROR_CONTEXT_LOCKED CHIP_APPLICATION_ERROR(0x42)
 #define CHIP_FUZZER_ERROR_SUBSCRIPTION_RESPONSE_TIMEOUT CHIP_APPLICATION_ERROR(0x43)
 
-using PrimitiveType = std::variant<std::monostate, bool, char *, float, double, NullOptionalType, int8_t, int16_t, int32_t, int64_t,
-                                   uint8_t, uint16_t, uint32_t, uint64_t, std::string>;
+using PrimitiveType = std::variant<std::monostate, bool, char *, float, double, chip::NullOptionalType, int8_t, int16_t, int32_t,
+                                   int64_t, uint8_t, uint16_t, uint32_t, uint64_t, std::string>;
 
 // Composite types
 using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
@@ -88,8 +96,6 @@ class OracleRuleMap;
 struct OracleResult;
 class Oracle;
 enum class OracleStatus : uint8_t;
-
-std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
 
 } // namespace fuzzing
 } // namespace chip
