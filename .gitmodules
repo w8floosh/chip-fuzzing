@@ -334,5 +334,5 @@ path = third_party/infineon/psoc6/psoc6_sdk/libs/lwip-network-interface-integrat
 url = https://github.com/Infineon/lwip-network-interface-integration.git
 platforms = infineon
 [submodule "third_party/yamlcpp/repo"]
-	path = third_party/yamlcpp/repo
-	url = https://github.com/jbeder/yaml-cpp.git
+path = third_party/yamlcpp/repo
+url = https://github.com/jbeder/yaml-cpp.git

@@ -4,6 +4,8 @@
 #include "Oracle.h"
 #include "tlv/DecodedTLVElement.h"
 #include "tlv/TLVDataPayloadHelper.h"
+#include <app/EventHeader.h>
+#include <app/MessageDef/StatusIB.h>
 #include <condition_variable>
 #include <numeric>
 
@@ -25,7 +27,9 @@ enum class FuzzerPhase : uint8_t
 class StateMonitor
 {
 public:
-    StateMonitor(fs::path dumpDir = "out/debug/standalone/chip-fuzzer/observations") : mDumpDirectory(dumpDir)
+    StateMonitor(const std::chrono::system_clock::time_point & startTime,
+                 fs::path dumpDir = "out/debug/standalone/chip-fuzzer/observations") :
+        mDumpDirectory(dumpDir), mStartTime(startTime)
     {
         if (!fs::exists(mDumpDirectory))
         {
@@ -37,7 +41,10 @@ public:
     {
         return { mErrorCounters.size(), mExpectedErrorCounters.size(), mUnexpectedErrorCounters.size() };
     }
-    void DumpTelemetry() {}
+
+    const std::chrono::system_clock::time_point & GetStartTime() { return mStartTime; }
+
+    void DumpTelemetry();
     void LogObservation(const utils::FuzzerObservation & observation);
 
     /**
@@ -67,6 +74,7 @@ private:
      */
     std::unordered_map<chip::app::ConcreteCommandPath, uint16_t, utils::MapKeyHasher> mSubscriptionTimeouts;
     fs::path mDumpDirectory;
+    const std::chrono::system_clock::time_point & mStartTime;
 
     void DumpObservation(const utils::FuzzerObservation & observation);
     bool IsObservationUnseen(const utils::FuzzerObservation & observation)
@@ -110,10 +118,12 @@ struct FuzzerContext
     bool * waitingForResponse;
     bool waitingForSubscriptionData = false;
     bool needsSubscriptionData      = false;
+    FuzzerContextStatus status;
+
     uint32_t id;
     chip::NodeId destination;
-    FuzzerContextStatus status;
     chip::Optional<chip::app::ConcreteCommandPath> commandPath = chip::NullOptional;
+    char * commandString;
     CHIP_ERROR * commandStatusResponse;
     utils::DataAttributePathSet changedAttributes;
 };
@@ -121,7 +131,7 @@ class FuzzerContextManager
 {
 public:
     FuzzerContextManager() = delete;
-    FuzzerContextManager(StateMonitor & pm, FuzzerPhase & phaseRef) : mStateMonitor(pm), mFuzzerPhase(phaseRef) {}
+    FuzzerContextManager(StateMonitor & sm, FuzzerPhase & phaseRef) : mStateMonitor(sm), mFuzzerPhase(phaseRef) {}
 
     void Initialize(std::condition_variable * cv, std::mutex * mutex, bool * waitingForResponse);
     CHIP_ERROR Update(CHIP_ERROR * err);
@@ -172,6 +182,8 @@ public:
         std::unique_lock<std::mutex> lk(*mContext->mutex);
         return mContext->cv->wait_until(lk, waitingUntil, [this]() { return !(*mContext->waitingForResponse); });
     }
+
+    FuzzerContext * GetContextSnapshot() { return mContext; }
 
 private:
     FuzzerContext * mContext = nullptr;
@@ -242,46 +254,41 @@ public:
     StateMonitor * GetStateMonitor() { return &mStateMonitor; }
     Oracle * GetOracle() { return &mOracle; }
     FuzzerPhase CurrentPhase() { return mCurrentPhase; }
+    std::string CurrentCommand() { return mCurrentCommand; }
+    std::pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>> CurrentAnalyzedPath() { return mCurrentAnalyzedPath; }
 
 private:
     // FuzzingStartCommand must be a friend class as it is the only allowed to instantiate the Fuzzer class.
     friend class ::FuzzingCommand;
     friend class ::FuzzingStartCommand;
 
+    // Fuzzer state data
+    NodeId mCurrentDestination;
+    uint32_t mTests;
+    uint32_t mTestIndex = 0;
+    std::string mCurrentCommand;
+    FuzzerPhase mCurrentPhase = FuzzerPhase::INITIALIZATION;
+    std::pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>> mCurrentAnalyzedPath;
+    Optional<fs::path> mOutputDirectory = NullOptional;
+    fs::path mSeedsDirectory;
+    std::vector<CommandHistoryEntry> mCommandHistory;
+    const std::chrono::system_clock::time_point mStartTime;
+    // Components
     DeviceStateManager mDeviceStateManager;
     StateMonitor mStateMonitor;
     Oracle mOracle;
     CallbackInterceptor mCallbackInterceptor;
     FuzzerContextManager mContextManager;
+    // TerminalUIManager mTerminalUIManager;
 
-    fs::path mSeedsDirectory;
-    Optional<fs::path> mOutputDirectory = NullOptional;
-    Optional<fs::path> mHistoryPath     = NullOptional;
-    // This callable object is the function responsible for generating the next command to be executed by the fuzzer.
-    // May be used to extend the fuzzer to use diverse generation methods aside the default one (Grammarinator).
-    std::function<const char *(fs::path)> mGenerationFunc;
-    NodeId mCurrentDestination;
-    std::vector<CommandHistoryEntry> mCommandHistory;
-    FuzzerPhase mCurrentPhase = FuzzerPhase::INITIALIZATION;
-
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory) :
-        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
-        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst) {};
-    Fuzzer(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc, fs::path dumpDirectory,
-           fs::path outputDirectory) :
-        mDeviceStateManager(dumpDirectory), mOracle(mStateMonitor),
-        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
-        mSeedsDirectory(seedsDirectory), mGenerationFunc(generationFunc), mCurrentDestination(dst)
+    Fuzzer(NodeId dst, fs::path outputDirectory, uint32_t tests) :
+        mCurrentDestination(dst), mTests(tests), mDeviceStateManager(outputDirectory / "statedumps"), mStateMonitor(mStartTime),
+        mOracle(mStateMonitor), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+        mContextManager(mStateMonitor, mCurrentPhase) /* , mTerminalUIManager(mTestIndex, mTests, *this) */
     {
         mOutputDirectory.SetValue(outputDirectory);
-    };
-    Fuzzer(NodeId dst, fs::path outputDirectory) :
-        mDeviceStateManager(outputDirectory / "statedumps"), mOracle(mStateMonitor),
-        mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination), mContextManager(mStateMonitor, mCurrentPhase),
-        mCurrentDestination(dst)
-    {
-        mOutputDirectory.SetValue(outputDirectory);
+        mCurrentAnalyzedPath = std::make_pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>>(
+            chip::app::ConcreteCommandPath(), std::unordered_set<IMStatus>());
     };
 
     Fuzzer(const Fuzzer &)                 = delete;
@@ -289,25 +296,9 @@ private:
     Fuzzer & operator=(const Fuzzer &)     = delete;
     Fuzzer & operator=(Fuzzer &&) noexcept = delete;
 
-    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
-                           fs::path dumpDirectory)
+    static void Initialize(NodeId dst, fs::path outputDirectory, uint32_t tests)
     {
-        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, dumpDirectory]() {
-            return Fuzzer(dst, seedsDirectory, generationFunc, dumpDirectory);
-        };
-        GetInstance(&init);
-    }
-    static void Initialize(NodeId dst, fs::path seedsDirectory, std::function<const char *(fs::path)> generationFunc,
-                           fs::path dumpDirectory, fs::path outputDirectory)
-    {
-        std::function<Fuzzer()> init = [dst, seedsDirectory, generationFunc, dumpDirectory, outputDirectory]() {
-            return Fuzzer(dst, seedsDirectory, generationFunc, dumpDirectory, outputDirectory);
-        };
-        GetInstance(&init);
-    }
-    static void Initialize(NodeId dst, fs::path outputDirectory)
-    {
-        std::function<Fuzzer()> init = [dst, outputDirectory]() { return Fuzzer(dst, outputDirectory); };
+        std::function<Fuzzer()> init = [dst, outputDirectory, tests]() { return Fuzzer(dst, outputDirectory, tests); };
         GetInstance(&init);
     }
 
@@ -322,8 +313,8 @@ private:
         VerifyOrReturn(mCurrentPhase != FuzzerPhase::TESTING);
         mCurrentPhase = static_cast<FuzzerPhase>((static_cast<uint8_t>(mCurrentPhase) + 1) % 3);
     }
+    void Cleanup();
 };
 
-// std::function<const char *(fs::path)> ConvertStringToGenerationFunction(const char * key);
 } // namespace fuzzing
 } // namespace chip

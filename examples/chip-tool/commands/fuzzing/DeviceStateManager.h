@@ -4,7 +4,6 @@
 #include "Utils.h"
 #include <unordered_map>
 
-namespace DM = chip::app::DataModel;
 namespace chip {
 namespace fuzzing {
 class AttributeState

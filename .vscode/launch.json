@@ -425,7 +425,8 @@
             ],
             "env": {
                 "CONDA_PREFIX": "${env:HOME}/.conda/envs/matter",
-                "PATH": "${env:PATH}"
+                "PATH": "${env:PATH}",
+                "TERM": "xterm-256color"
             },
             "cwd": "${workspaceFolder}",
             "breakpointMode": "path"
