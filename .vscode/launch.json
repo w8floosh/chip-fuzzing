@@ -419,7 +419,7 @@
             "args": [
                 "fuzzing",
                 "start",
-                "0xb",
+                "0xc",
                 "1000",
                 "out/debug/standalone/chip-fuzzer"
             ],

@@ -2,6 +2,7 @@
 #include "ForwardDeclarations.h"
 #include "Utils.h"
 #include <app/MessageDef/StatusIB.h>
+#include <json/json.h>
 
 namespace chip {
 namespace fuzzing {
@@ -33,25 +34,23 @@ class OracleRule
 public:
     struct ExtraArgs
     {
-        std::optional<std::unordered_map<uint8_t, TLV::TLVType>> requiredCommandFields;
-        std::optional<std::array<int64_t, 2>> constraintLimits;
+        std::map<uint8_t, const std::pair<chip::TLV::TLVType, uint8_t>> * requiredCommandFields = nullptr;
+        std::array<int64_t, 2> * constraintLimits                                               = nullptr;
     };
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command) :
-        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::nullopt) {};
-
-    OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command, ExtraArgs && extraArgs) :
-        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::move(extraArgs)) {};
+        mEndpointId(endpoint), mClusterId(cluster), mSubjectId(command), mIsCommand(true), mExtraArgs(std::nullopt),
+        mExpectedStatuses({ IMStatus::Success }) {};
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-               std::unordered_set<IMStatus> && expectedStatuses) :
+               std::unordered_set<IMStatus> & expectedStatuses) :
         mEndpointId(endpoint), mClusterId(cluster), mSubjectId(attribute), mIsCommand(false), mExtraArgs(std::nullopt),
-        mExpectedStatuses(std::move(expectedStatuses)) {};
+        mExpectedStatuses(expectedStatuses) {};
 
     OracleRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-               std::unordered_set<IMStatus> && expectedStatuses, ExtraArgs && extraArgs) :
+               std::unordered_set<IMStatus> & expectedStatuses, ExtraArgs extraArgs) :
         mEndpointId(endpoint), mClusterId(cluster), mSubjectId(attribute), mIsCommand(false), mExtraArgs(extraArgs),
-        mExpectedStatuses(std::move(expectedStatuses)) {};
+        mExpectedStatuses(expectedStatuses) {};
 
     OracleRule & operator=(const OracleRule &) = default;
 
@@ -68,35 +67,7 @@ public:
 
     /** TODO: Checks if the observed status matches at least one of the expected ones and the supplied payload respects all the
      * constraints. */
-    // bool Query(const IMStatus & receivedStatus, Json::Value payload) const
-    // {
-    //     VerifyOrReturnValue(mEndpointId != kInvalidEndpointId && mClusterId != kInvalidClusterId && mSubjectId !=
-    //     kInvalidCommandId,
-    //                         false);
-    //     if (mExtraArgs.has_value())
-    //     {
-    //         if (mExtraArgs->requiredCommandFields.has_value())
-    //         {
-    //             for (const auto & [fieldId, fieldType] : mExtraArgs->requiredCommandFields.value())
-    //             {
-    //                 if (payload[fieldId] != fieldType)
-    //                     return false;
-    //             }
-    //         }
-    //         if (mExtraArgs->constraintLimits.has_value())
-    //         {
-    //             auto [min, max] = mExtraArgs->constraintLimits.value();
-    //             for (const auto & [fieldId, fieldType] : mExtraArgs->requiredCommandFields.value())
-    //             {
-    //                 if (payload[fieldId].type() != fieldType)
-    //                     return false;
-    //                 if (payload[fieldId].asInt64() < min || payload[fieldId].asInt64() > max)
-    //                     return false;
-    //             }
-    //         }
-    //     }
-    //     return Query(receivedStatus);
-    // }
+    bool Query(const IMStatus & receivedStatus, Json::Value & payload) const { return false; }
 
 private:
     const chip::EndpointId mEndpointId;
@@ -145,9 +116,9 @@ public:
                              const IMStatus & receivedStatus);
     void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command);
     void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-             std::unordered_set<IMStatus> && expectedStatuses);
+             std::unordered_set<IMStatus> & expectedStatuses);
     void Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-             std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs);
+             std::unordered_set<IMStatus> & expectedStatuses, OracleRule::ExtraArgs extraArgs);
 
 private:
     std::unordered_map<utils::OracleRuleMapKey, OracleRule, utils::MapKeyHasher, utils::MapKeyEqualizer> mRuleMap;
@@ -179,14 +150,14 @@ public:
         mRuleMap.Add(endpoint, cluster, command);
     }
     void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-                 std::unordered_set<IMStatus> && expectedStatuses)
+                 std::unordered_set<IMStatus> & expectedStatuses)
     {
-        mRuleMap.Add(endpoint, cluster, attribute, std::move(expectedStatuses));
+        mRuleMap.Add(endpoint, cluster, attribute, expectedStatuses);
     }
     void AddRule(chip::EndpointId endpoint, chip::ClusterId cluster, chip::AttributeId attribute,
-                 std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs)
+                 std::unordered_set<IMStatus> & expectedStatuses, OracleRule::ExtraArgs extraArgs)
     {
-        mRuleMap.Add(endpoint, cluster, attribute, std::move(expectedStatuses), std::move(extraArgs));
+        mRuleMap.Add(endpoint, cluster, attribute, expectedStatuses, extraArgs);
     }
 
 private:

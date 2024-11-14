@@ -2,6 +2,7 @@
 #include "DeviceStateManager.h"
 #include "ForwardDeclarations.h"
 #include "Oracle.h"
+#include "specification/SpecificationEncoder.h"
 #include "tlv/DecodedTLVElement.h"
 #include "tlv/TLVDataPayloadHelper.h"
 #include <app/EventHeader.h>
@@ -67,6 +68,7 @@ private:
     std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mErrorCounters;
     std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mExpectedErrorCounters;
     std::unordered_map<CHIP_ERROR, uint64_t, utils::MapKeyHasher> mUnexpectedErrorCounters;
+
     std::unordered_map<utils::FuzzerObservation, uint64_t, utils::MapKeyHasher, utils::MapKeyEqualizer> mObservationCounters;
     /**
      * Tracks the number of times a command did not send any subscription report back, timing out.
@@ -139,7 +141,7 @@ public:
     CHIP_ERROR Update(chip::NodeId dst, chip::app::ConcreteCommandPath commandPath, CHIP_ERROR * err);
     CHIP_ERROR Update(utils::DataAttributePathSet attrs);
     CHIP_ERROR Update(chip::Optional<bool> waitingForResponse, chip::Optional<bool> waitingForSubscriptionData);
-    CHIP_ERROR Finalize();
+    CHIP_ERROR Finalize(bool log = false);
     CHIP_ERROR MoveToState(FuzzerContextStatus::Status newState)
     {
         std::unique_lock<std::mutex> lk(mContextManagerMutex);
@@ -253,9 +255,10 @@ public:
     CallbackInterceptor * GetCallbackInterceptor() { return &mCallbackInterceptor; }
     StateMonitor * GetStateMonitor() { return &mStateMonitor; }
     Oracle * GetOracle() { return &mOracle; }
+    specification::SpecificationEncoder * GetSpecificationEncoder() { return &mSpecificationEncoder; }
     FuzzerPhase CurrentPhase() { return mCurrentPhase; }
     std::string CurrentCommand() { return mCurrentCommand; }
-    std::pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>> CurrentAnalyzedPath() { return mCurrentAnalyzedPath; }
+    chip::app::ConcreteCommandPath CurrentAnalyzedPath() { return mCurrentAnalyzedPath; }
 
 private:
     // FuzzingStartCommand must be a friend class as it is the only allowed to instantiate the Fuzzer class.
@@ -268,12 +271,13 @@ private:
     uint32_t mTestIndex = 0;
     std::string mCurrentCommand;
     FuzzerPhase mCurrentPhase = FuzzerPhase::INITIALIZATION;
-    std::pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>> mCurrentAnalyzedPath;
+    chip::app::ConcreteCommandPath mCurrentAnalyzedPath;
     Optional<fs::path> mOutputDirectory = NullOptional;
     fs::path mSeedsDirectory;
     std::vector<CommandHistoryEntry> mCommandHistory;
     const std::chrono::system_clock::time_point mStartTime;
     // Components
+    specification::SpecificationEncoder mSpecificationEncoder;
     DeviceStateManager mDeviceStateManager;
     StateMonitor mStateMonitor;
     Oracle mOracle;
@@ -281,14 +285,13 @@ private:
     FuzzerContextManager mContextManager;
     // TerminalUIManager mTerminalUIManager;
 
-    Fuzzer(NodeId dst, fs::path outputDirectory, uint32_t tests) :
-        mCurrentDestination(dst), mTests(tests), mDeviceStateManager(outputDirectory / "statedumps"), mStateMonitor(mStartTime),
-        mOracle(mStateMonitor), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
+    Fuzzer(NodeId dst, fs::path outputDirectory, uint32_t tests, FuzzingCommand * executor) :
+        mCurrentDestination(dst), mTests(tests), mStartTime(std::chrono::system_clock::now()),
+        mSpecificationEncoder(mCurrentDestination, executor), mDeviceStateManager(outputDirectory / "statedumps"),
+        mStateMonitor(mStartTime), mOracle(mStateMonitor), mCallbackInterceptor(mDeviceStateManager, mOracle, mCurrentDestination),
         mContextManager(mStateMonitor, mCurrentPhase) /* , mTerminalUIManager(mTestIndex, mTests, *this) */
     {
         mOutputDirectory.SetValue(outputDirectory);
-        mCurrentAnalyzedPath = std::make_pair<chip::app::ConcreteCommandPath, std::unordered_set<IMStatus>>(
-            chip::app::ConcreteCommandPath(), std::unordered_set<IMStatus>());
     };
 
     Fuzzer(const Fuzzer &)                 = delete;
@@ -296,9 +299,11 @@ private:
     Fuzzer & operator=(const Fuzzer &)     = delete;
     Fuzzer & operator=(Fuzzer &&) noexcept = delete;
 
-    static void Initialize(NodeId dst, fs::path outputDirectory, uint32_t tests)
+    static void Initialize(NodeId dst, fs::path outputDirectory, uint32_t tests, FuzzingCommand * executor)
     {
-        std::function<Fuzzer()> init = [dst, outputDirectory, tests]() { return Fuzzer(dst, outputDirectory, tests); };
+        std::function<Fuzzer()> init = [dst, outputDirectory, tests, executor]() {
+            return Fuzzer(dst, outputDirectory, tests, executor);
+        };
         GetInstance(&init);
     }
 
@@ -311,7 +316,7 @@ private:
     void GoToNextPhase()
     {
         VerifyOrReturn(mCurrentPhase != FuzzerPhase::TESTING);
-        mCurrentPhase = static_cast<FuzzerPhase>((static_cast<uint8_t>(mCurrentPhase) + 1) % 3);
+        mCurrentPhase = static_cast<FuzzerPhase>((static_cast<uint8_t>(mCurrentPhase) + 1));
     }
     void Cleanup();
 };

@@ -132,7 +132,7 @@ public:
         kDefaultValues[key] = "s:" + std::to_string(INT16_MAX >> 8);
 
         key                 = { TLV::TLVType::kTLVType_SignedInteger, 1 };
-        kDefaultValues[key] = "s:127";
+        kDefaultValues[key] = "s:1";
 
         key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 8 };
         kDefaultValues[key] = std::to_string(UINT64_MAX >> 32);
@@ -144,7 +144,7 @@ public:
         kDefaultValues[key] = std::to_string(UINT16_MAX >> 8);
 
         key                 = { TLV::TLVType::kTLVType_UnsignedInteger, 1 };
-        kDefaultValues[key] = "255";
+        kDefaultValues[key] = "0";
 
         key = { TLV::TLVType::kTLVType_UTF8String, 4 };
         kDefaultValues[key].resize(UINT32_MAX >> 16, 'a');

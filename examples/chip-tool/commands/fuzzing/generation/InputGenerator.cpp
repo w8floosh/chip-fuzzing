@@ -1,11 +1,105 @@
-#include "RuntimeGrammarManager.h"
+#include "InputGenerator.h"
 #include "../DeviceStateManager.h"
 #include "../Visitors.h"
 #include "../tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
+#include <json/json.h>
+#include <regex>
+namespace {
+uint64_t hexToUnsignedInt(const std::string & hexStr)
+{
+    uint64_t value;
+    std::stringstream ss;
+    ss << std::hex << hexStr;
+    ss >> value;
+    return value;
+}
+
+// Convert hex string to signed integer
+int64_t hexToSignedInt(const std::string & hexStr)
+{
+    uint64_t unsignedValue = hexToUnsignedInt(hexStr);
+    // Interpret the value as a signed integer based on its length
+    int64_t signedValue = static_cast<int64_t>(unsignedValue);
+    return signedValue;
+}
+
+// Convert hex string to float
+float hexToFloat(const std::string & hexStr)
+{
+    uint32_t intValue = static_cast<uint32_t>(hexToUnsignedInt(hexStr));
+    float floatValue;
+    std::memcpy(&floatValue, &intValue, sizeof(floatValue)); // Bitwise conversion
+    return floatValue;
+}
+
+// Convert hex string to double
+double hexToDouble(const std::string & hexStr)
+{
+    uint64_t intValue = hexToUnsignedInt(hexStr);
+    double doubleValue;
+    std::memcpy(&doubleValue, &intValue, sizeof(doubleValue)); // Bitwise conversion
+    return doubleValue;
+}
+
+// Function to scan and convert hex values in JSON string
+std::string convertHexToDecimal(std::string json)
+{
+    // Define the regular expression pattern for matching the values
+    std::regex pattern(R"(\"(s:|f:|d:)?(0x[0-9a-fA-F]+)\")");
+    std::smatch match;
+
+    std::string result;
+    std::string::const_iterator searchStart(json.cbegin());
+
+    while (std::regex_search(searchStart, json.cend(), match, pattern))
+    {
+        // Append the part of the JSON before the match
+        result += match.prefix();
+
+        // Extract the matched components
+        std::string prefix   = match[1]; // "s:", "f:", "d:", or empty
+        std::string hexValue = match[2]; // Hex number
+
+        // Remove "0x" prefix from the hex number for easier conversion
+        hexValue = hexValue.substr(2);
+
+        // Convert based on the prefix
+        std::ostringstream convertedValue;
+        convertedValue << prefix;
+        if (prefix == "s:")
+        {
+            convertedValue << hexToSignedInt(hexValue) << "\"";
+        }
+        else if (prefix == "f:")
+        {
+            convertedValue << std::fixed << hexToFloat(hexValue) << std::dec << "\"";
+        }
+        else if (prefix == "d:")
+        {
+            convertedValue << std::fixed << hexToDouble(hexValue) << std::dec << "\"";
+        }
+        else
+        {
+            convertedValue << hexToUnsignedInt(hexValue) << "\"";
+        }
+
+        // Append the converted value to the result
+        result += "\"" + convertedValue.str();
+
+        // Move searchStart forward to continue searching the rest of the string
+        searchStart = match.suffix().first;
+    }
+
+    // Append the remaining part of the JSON string
+    result += std::string(searchStart, json.cend());
+
+    return result;
+}
+} // namespace
 namespace gen = chip::fuzzing::generation;
-void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node)
+void gen::InputGenerator::CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node)
 {
     VerifyOrReturn(!fs::exists(mGeneratedLexerPath) && !fs::exists(mGeneratedParserPath));
 
@@ -128,7 +222,7 @@ void gen::RuntimeGrammarManager::CreateGrammar(DeviceStateManager * deviceState,
     ChipLogProgress(chipFuzzer, "Grammar files processed successfully.");
 };
 
-void gen::RuntimeGrammarManager::SetPythonExecutable()
+void gen::InputGenerator::SetPythonExecutable()
 {
     VerifyOrDieWithMsg(std::system("python --version > /dev/null 2>&1") == 0, chipFuzzer, "Python is required to run the fuzzer.");
     const char * condaPrefix = std::getenv("CONDA_PREFIX");
@@ -147,16 +241,21 @@ void gen::RuntimeGrammarManager::SetPythonExecutable()
     mPythonExecutable = execPath;
 };
 
-bool gen::RuntimeGrammarManager::IsGrammarinatorInstalled()
+bool gen::InputGenerator::IsGrammarinatorInstalled()
 {
     std::string command = mPythonExecutable + " -c \"import grammarinator\"";
     return std::system(command.c_str()) == 0;
 }
 
-void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outFile, size_t numCases, uint16_t maxDepth)
+void gen::InputGenerator::GenerateTestCases(fs::path outFile, size_t numCases, uint16_t maxDepth)
 {
     VerifyOrDieWithMsg(std::filesystem::exists(mGeneratedLexerPath), chipFuzzer, "Lexer file not found.");
     VerifyOrDieWithMsg(std::filesystem::exists(mGeneratedParserPath), chipFuzzer, "Parser file not found.");
+
+    if (!fs::exists(outFile.parent_path()))
+    {
+        VerifyOrDie(fs::create_directories(outFile.parent_path()));
+    }
 
     std::ostringstream command("PYTHONUNBUFFERED=1 " + mPythonExecutable, std::ios_base::ate);
 
@@ -171,4 +270,31 @@ void gen::RuntimeGrammarManager::GenerateTestCases(fs::path outFile, size_t numC
     ChipLogProgress(chipFuzzer, "Generating test cases...");
     VerifyOrDieWithMsg(std::system(command.str().c_str()) == 0, chipFuzzer, "Failed to generate test cases.");
     ChipLogProgress(chipFuzzer, "Generated %zu test cases.", numCases);
+}
+
+std::string gen::InputGenerator::ParseTestCase(chip::NodeId node, std::string testCase)
+{
+    Json::Value root;
+    Json::CharReaderBuilder reader;
+    std::string errs;
+
+    std::string endpoint, cluster, command;
+    std::istringstream iss(testCase);
+
+    // Skip the first three tokens (endpoint, cluster, command)
+    iss >> endpoint >> cluster >> command;
+
+    if (!Json::parseFromStream(reader, iss, &root, &errs))
+    {
+        std::cerr << "Error parsing JSON: " << errs << std::endl;
+        return "";
+    }
+
+    // Serialize back to string without duplicate keys
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+    std::string json      = Json::writeString(writer, root);
+    std::string payload   = convertHexToDecimal(json);
+
+    return cluster + " " + command + " " + payload + " " + std::to_string(node) + " " + endpoint;
 }
