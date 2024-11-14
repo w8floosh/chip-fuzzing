@@ -20,8 +20,6 @@ const fuzz::OracleStatus & fuzz::Oracle::Consume(chip::EndpointId endpoint, chip
             mCurrentStatus = OracleStatus::UNREACHABLE;
         else
             mCurrentStatus = OracleStatus::TIMEOUT;
-
-        return mCurrentStatus;
     }
 
     OracleResult result = mRuleMap.Query(endpoint, cluster, subject, isCommand, observed.mStatus);
@@ -50,18 +48,17 @@ void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster
     VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command)).second);
 }
 void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
-                              std::unordered_set<IMStatus> && expectedStatuses)
+                              std::unordered_set<IMStatus> & expectedStatuses)
 {
     VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && command != kInvalidCommandId);
     key_t key(endpoint, cluster, command, true);
-    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, std::move(expectedStatuses))).second);
+    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, expectedStatuses)).second);
 }
 
 void fuzz::OracleRuleMap::Add(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
-                              std::unordered_set<IMStatus> && expectedStatuses, OracleRule::ExtraArgs && extraArgs)
+                              std::unordered_set<IMStatus> & expectedStatuses, OracleRule::ExtraArgs extraArgs)
 {
     VerifyOrReturn(endpoint != kInvalidEndpointId && cluster != kInvalidClusterId && command != kInvalidCommandId);
     key_t key(endpoint, cluster, command, true);
-    VerifyOrDie(
-        mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, std::move(expectedStatuses), std::move(extraArgs))).second);
+    VerifyOrDie(mRuleMap.emplace(key, OracleRule(endpoint, cluster, command, expectedStatuses, extraArgs)).second);
 }

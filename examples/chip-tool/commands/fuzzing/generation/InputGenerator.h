@@ -6,10 +6,12 @@
 namespace chip {
 namespace fuzzing {
 namespace generation {
-class RuntimeGrammarManager
+// TODO: Rename this to InputGenerator
+
+class InputGenerator
 {
 public:
-    RuntimeGrammarManager(const chip::fuzzing::BasicInformation * nodeInfo, fs::path baseDir) :
+    InputGenerator(const chip::fuzzing::BasicInformation * nodeInfo, fs::path baseDir) :
         mBaseLexerPath("examples/chip-tool/commands/fuzzing/generation/CommandLexer.g4"),
         mBaseParserPath("examples/chip-tool/commands/fuzzing/generation/CommandParser.g4")
     {
@@ -32,12 +34,14 @@ public:
         VerifyOrDieWithMsg(IsGrammarinatorInstalled(), chipFuzzer,
                            "Python package 'grammarinator' is required for fuzzer grammar generation.");
     };
-    ~RuntimeGrammarManager() = default;
+    ~InputGenerator() = default;
 
     std::string mGrammarId;
 
     void CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node);
     void GenerateTestCases(fs::path outDir, size_t numCases, uint16_t maxDepth = 12);
+    // Removes duplicate keys from the test case payload and converts all keys from hex to decimal.
+    static std::string ParseTestCase(chip::NodeId node, std::string testCase);
 
 private:
     fs::path mBaseLexerPath;

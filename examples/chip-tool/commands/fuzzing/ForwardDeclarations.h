@@ -51,7 +51,7 @@ using PrimitiveType = std::variant<std::monostate, bool, char *, float, double, 
 using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
 
 namespace generation {
-class RuntimeGrammarManager;
+class InputGenerator;
 const char * GenerateCommandSeedOnly(fs::path seedsDir);
 } // namespace generation
 
