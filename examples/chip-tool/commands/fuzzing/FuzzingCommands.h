@@ -62,8 +62,5 @@ private:
     CHIP_ERROR AcquireBasicInformation();
     bool TestTCPServerSupport();
     CHIP_ERROR SubscribeAttributesAndEvents();
-    CHIP_ERROR DeduceExpectedErrors(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
-                                    std::unordered_set<IMStatus> & errors,
-                                    chip::Optional<fs::path> dependencyTestFile = chip::NullOptional);
     CHIP_ERROR AddOracleRules(chip::Optional<fs::path> dependencyTestFile);
 };

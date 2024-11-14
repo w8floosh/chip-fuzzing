@@ -47,7 +47,7 @@ void fuzz::StateMonitor::DumpTelemetry()
             os << YAML::Key << "attribute" << YAML::Value << path.mAttributeId;
             os << YAML::EndMap;
         }
-        os << YAML::EndMap;
+        os << YAML::EndSeq << YAML::EndMap;
     }
 
     os << YAML::EndSeq << YAML::EndMap;
@@ -72,7 +72,8 @@ void fuzz::CallbackInterceptor::AnalyzeCommandResponse(chip::TLV::TLVReader * da
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
     }
 
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mCommandId, true, status);
+    if (fuzz::Fuzzer::GetInstance()->CurrentPhase() == fuzz::FuzzerPhase::TESTING)
+        mOracle.Consume(path.mEndpointId, path.mClusterId, path.mCommandId, true, status);
 }
 
 void fuzz::CallbackInterceptor::ProcessReportData(chip::TLV::TLVReader * data, const chip::app::ConcreteDataAttributePath & path,
@@ -117,7 +118,8 @@ void fuzz::CallbackInterceptor::ProcessReportData(chip::TLV::TLVReader * data, c
         }
     }
 
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
+    if (fuzz::Fuzzer::GetInstance()->CurrentPhase() == fuzz::FuzzerPhase::TESTING)
+        mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
 }
 
 void fuzz::CallbackInterceptor::ProcessReportData(const chip::app::EventHeader & eventHeader, chip::TLV::TLVReader * data,
@@ -134,7 +136,8 @@ void fuzz::CallbackInterceptor::ProcessReportData(const chip::app::EventHeader &
         TLV::DecodedTLVElementPrettyPrinter(output).Print();
     }
 
-    mOracle.Consume(eventHeader.mPath.mEndpointId, eventHeader.mPath.mClusterId, eventHeader.mPath.mEventId, false, *status);
+    if (fuzz::Fuzzer::GetInstance()->CurrentPhase() == fuzz::FuzzerPhase::TESTING)
+        mOracle.Consume(eventHeader.mPath.mEndpointId, eventHeader.mPath.mClusterId, eventHeader.mPath.mEventId, false, *status);
 }
 
 void fuzz::CallbackInterceptor::AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path,
@@ -144,7 +147,9 @@ void fuzz::CallbackInterceptor::AnalyzeReportError(const chip::app::ConcreteData
         mDeviceStateManager.GetAttributeState(mCurrentDestination, path.mEndpointId, path.mClusterId, path.mAttributeId);
     if (attributeState.IsReadable())
         attributeState.ToggleBlockReads();
-    mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
+
+    if (fuzz::Fuzzer::GetInstance()->CurrentPhase() == fuzz::FuzzerPhase::TESTING)
+        mOracle.Consume(path.mEndpointId, path.mClusterId, path.mAttributeId, false, status);
 }
 
 void fuzz::CallbackInterceptor::AnalyzeCommandError(const chip::Protocols::InteractionModel::MsgType messageType, CHIP_ERROR error,
@@ -199,7 +204,7 @@ CHIP_ERROR fuzz::FuzzerContextManager::Update(chip::Optional<bool> waitingForRes
         mContext->waitingForSubscriptionData = waitingForSubscriptionData.Value();
         if (mContext->waitingForSubscriptionData && mContext->commandPath.HasValue() &&
             !mStateMonitor.HasExceededSubscriptionTimeoutsLimit(mContext->commandPath.Value()) &&
-            mFuzzerPhase == FuzzerPhase::TESTING)
+            (mFuzzerPhase == FuzzerPhase::TESTING || mFuzzerPhase == FuzzerPhase::EXPLORATION))
             mContext->needsSubscriptionData = true;
     }
     ChipLogProgress(chipFuzzer, "New context flags state: [res: %d, sub: %d]", *mContext->waitingForResponse,
@@ -256,7 +261,7 @@ CHIP_ERROR fuzz::FuzzerContextManager::Update(utils::DataAttributePathSet attrs)
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::FuzzerContextManager::Finalize()
+CHIP_ERROR fuzz::FuzzerContextManager::Finalize(bool log)
 {
     CHIP_ERROR err = CHIP_NO_ERROR;
     {
@@ -292,7 +297,7 @@ CHIP_ERROR fuzz::FuzzerContextManager::Finalize()
 
     ChipLogProgress(chipFuzzer, "Moving fuzzer context state to TERMINATED.");
     mContext->status = FuzzerContextStatus::TERMINATED;
-    if (mContext->commandPath.HasValue())
+    if (mContext->commandPath.HasValue() && log)
         mStateMonitor.LogObservation(
             { mContext->commandPath.Value(), *mContext->commandStatusResponse, mContext->changedAttributes });
 
@@ -303,10 +308,10 @@ CHIP_ERROR fuzz::FuzzerContextManager::Finalize()
 
 void fuzz::StateMonitor::LogObservation(const utils::FuzzerObservation & observation)
 {
-    if (IsObservationUnseen(observation))
-    {
-        DumpObservation(observation);
-    }
+    // if (IsObservationUnseen(observation))
+    // {
+    //     DumpObservation(observation);
+    // }
     mObservationCounters[observation]++;
 }
 
@@ -371,10 +376,4 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
     return CHIP_NO_ERROR;
 }
 
-void fuzz::Fuzzer::Cleanup()
-{
-    auto now    = std::chrono::system_clock::now();
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-
-    // mTerminalUIManager.Close(mOutputDirectory.Value() / "stats" / std::to_string(now_ms));
-}
+void fuzz::Fuzzer::Cleanup() {}
