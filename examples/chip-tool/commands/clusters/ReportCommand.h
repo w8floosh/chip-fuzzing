@@ -213,6 +213,8 @@ protected:
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
             if (contextManager->CurrentStatus() == fuzz::FuzzerContextStatus::NON_INVOKE_REQUEST)
                 LogErrorOnFailure(contextManager->MoveToState(fuzz::FuzzerContextStatus::NON_INVOKE_RESPONSE));
+            else
+                ChipLogProgress(chipFuzzer, "***RECEIVED SUBSCRIPTION***");
         }
     }
 
