@@ -5,6 +5,7 @@
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
 #include <map>
+#include <mutex>
 #include <thread>
 
 namespace fuzz = chip::fuzzing;

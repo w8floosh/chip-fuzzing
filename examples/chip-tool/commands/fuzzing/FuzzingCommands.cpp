@@ -47,16 +47,6 @@ inline std::string GetReadAllClusterAttributesCommand(chip::NodeId node, chip::E
         .append(std::to_string(endpoint));
     return kCommand;
 }; // reads all attributes
-inline std::string GetReadClusterEventCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster)
-{
-    std::string kCommand("any read-event-by-id ");
-    kCommand.append(std::to_string(cluster))
-        .append(" 0xFFFFFFFF ")
-        .append(std::to_string(node))
-        .append(" ")
-        .append(std::to_string(endpoint));
-    return kCommand;
-}; // reads all events
 inline std::string GetSubscribeAllClusterAttributesCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster)
 {
     std::string kCommand("any subscribe-by-id ");
@@ -69,20 +59,6 @@ inline std::string GetSubscribeAllClusterAttributesCommand(chip::NodeId node, ch
         .append(std::to_string(endpoint));
     return kCommand;
 }; // subscribes to all attributes
-inline std::string GetSubscribeEventCommand(chip::NodeId node, chip::EndpointId endpoint, chip::ClusterId cluster,
-                                            chip::EventId event)
-{
-    std::string kCommand("any subscribe-event-by-id ");
-    kCommand.append(std::to_string(cluster))
-        .append(" ")
-        .append(std::to_string(event))
-        .append(" 0")
-        .append(" -1 ")
-        .append(std::to_string(node))
-        .append(" ")
-        .append(std::to_string(endpoint));
-    return kCommand;
-}; // subscribes to all events
 } // namespace
 
 void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
@@ -204,7 +180,7 @@ CHIP_ERROR FuzzingStartCommand::AddOracleRules(chip::Optional<fs::path> dependen
  *
  * This method is responsible for acquiring the remote data model for a specific NodeId. It retrieves
  * the endpoints, device types, server clusters, and cluster attributes for the given NodeId. It also
- * subscribes to all cluster attributes and events for each endpoint and cluster. If any of the commands
+ * subscribes to all cluster attributes for each endpoint and cluster. If any of the commands
  * fail to execute successfully, an error code is returned.
  *
  * @param id The NodeId for which to acquire the remote data model.
@@ -223,7 +199,7 @@ FuzzingStartCommand::AcquireRemoteDataModel()
      * Steps:
      * 1) get the endpoints of the node;
      * 2) for each endpoint, get the device type and server clusters (those who respond to commands);
-     * 3) for each cluster, read all attributes and events and subscribe to them.
+     * 3) for each cluster, read all attributes and subscribe to them.
      *
      * The command response callbacks will parse the response and update the device state accordingly.
      */
@@ -255,7 +231,7 @@ FuzzingStartCommand::AcquireRemoteDataModel()
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR FuzzingStartCommand::SubscribeAttributesAndEvents()
+CHIP_ERROR FuzzingStartCommand::SubscribeAttributes()
 {
     auto deviceState  = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
     CHIP_ERROR status = CHIP_NO_ERROR;
@@ -273,20 +249,6 @@ CHIP_ERROR FuzzingStartCommand::SubscribeAttributesAndEvents()
 
             VerifyOrReturnError(deviceState->List(mDestinationId, endpoint.first, cluster.first) != nullptr,
                                 CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-
-            auto eventList = deviceState->ReadAttribute(mDestinationId, endpoint.first, cluster.first,
-                                                        chip::app::Clusters::Globals::Attributes::EventList::Id);
-            if (!std::holds_alternative<chip::fuzzing::ContainerType>(eventList))
-                continue;
-
-            for (auto & event : std::get<chip::fuzzing::ContainerType>(eventList))
-            {
-                std::string subscribeClusterEventCommand = GetSubscribeEventCommand(
-                    mDestinationId, endpoint.first, cluster.first, chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(event));
-
-                ExecuteCommand(subscribeClusterEventCommand.c_str(), &status);
-                VerifyOrReturnError(status == CHIP_NO_ERROR, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
-            }
         }
     }
     return CHIP_NO_ERROR;
@@ -323,7 +285,7 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
 
     ReturnErrorOnFailure(AcquireBasicInformation());
     mDestinationSupportsTCPServer = TestTCPServerSupport();
-    ReturnErrorOnFailure(SubscribeAttributesAndEvents());
+    ReturnErrorOnFailure(SubscribeAttributes());
 
     const fuzz::BasicInformation * nodeInfo = deviceStateManager->GetNodeInformation(mDestinationId);
 

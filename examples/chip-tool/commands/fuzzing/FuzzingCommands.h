@@ -61,6 +61,6 @@ private:
     CHIP_ERROR AcquireRemoteDataModel();
     CHIP_ERROR AcquireBasicInformation();
     bool TestTCPServerSupport();
-    CHIP_ERROR SubscribeAttributesAndEvents();
+    CHIP_ERROR SubscribeAttributes();
     CHIP_ERROR AddOracleRules(chip::Optional<fs::path> dependencyTestFile);
 };
