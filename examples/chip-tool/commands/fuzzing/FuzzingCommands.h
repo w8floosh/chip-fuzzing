@@ -2,7 +2,7 @@
 #include "../common/CHIPCommand.h"
 #include "../common/Commands.h"
 #include "ForwardDeclarations.h"
-#include "Fuzzing.h"
+#include "Fuzzer.h"
 
 namespace fuzz = chip::fuzzing;
 namespace fs   = std::filesystem;
@@ -38,7 +38,7 @@ public:
         AddArgument("destination-id", 0, UINT64_MAX, &mDestinationId,
                     "64-bit node or group identifier.\n  Group identifiers are detected by being in the 0xFFFF'FFFF'FFFF'xxxx "
                     "range. Group fuzzing is not yet supported.");
-        AddArgument("tests", 0U, UINT32_MAX, &mTests, "Number of test cases to run the fuzzer for");
+        AddArgument("tests", 0U, UINT64_MAX, &mTests, "Number of test cases to run the fuzzer for");
         AddArgument("output-path", &mOutputDirectoryArgument,
                     "Output path for saving fuzzer data, including device grammar files, test cases and temporary files.");
         // AddArgument("generation", &mGenerationFuncArgument, "Input generation function (seed-only, ...)");
@@ -51,7 +51,7 @@ public:
 
 private:
     chip::NodeId mDestinationId;
-    uint32_t mTests                    = 1000U;
+    size_t mTests                      = 1000U;
     bool mDestinationSupportsTCPServer = false;
 
     char * mOutputDirectoryArgument;

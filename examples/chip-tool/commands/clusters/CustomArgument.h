@@ -169,7 +169,8 @@ private:
     {
         char numberAsString[21];
         chip::Platform::CopyString(numberAsString, value.asCString() + kPayloadUnsignedPrefixLen);
-
+        VerifyOrReturnError(std::string(numberAsString).find_first_of("0123456789") != std::string::npos,
+                            CHIP_ERROR_INVALID_ARGUMENT);
         auto number = std::stoull(numberAsString, nullptr, 0);
         return chip::app::DataModel::Encode(*writer, tag, static_cast<uint64_t>(number));
     }
@@ -178,7 +179,8 @@ private:
     {
         char numberAsString[21];
         chip::Platform::CopyString(numberAsString, value.asCString() + kPayloadSignedPrefixLen);
-
+        VerifyOrReturnError(std::string(numberAsString).find_first_of("0123456789") != std::string::npos,
+                            CHIP_ERROR_INVALID_ARGUMENT);
         auto number = std::stoll(numberAsString, nullptr, 0);
         return chip::app::DataModel::Encode(*writer, tag, static_cast<int64_t>(number));
     }
@@ -187,7 +189,8 @@ private:
     {
         char numberAsString[21];
         chip::Platform::CopyString(numberAsString, value.asCString() + kPayloadFloatPrefixLen);
-
+        VerifyOrReturnError(std::string(numberAsString).find_first_of("0123456789") != std::string::npos,
+                            CHIP_ERROR_INVALID_ARGUMENT);
         auto number = std::stof(numberAsString);
         return chip::app::DataModel::Encode(*writer, tag, number);
     }
@@ -196,7 +199,8 @@ private:
     {
         char numberAsString[21];
         chip::Platform::CopyString(numberAsString, value.asCString() + kPayloadDoublePrefixLen);
-
+        VerifyOrReturnError(std::string(numberAsString).find_first_of("0123456789") != std::string::npos,
+                            CHIP_ERROR_INVALID_ARGUMENT);
         auto number = std::stod(numberAsString);
         return chip::app::DataModel::Encode(*writer, tag, number);
     }

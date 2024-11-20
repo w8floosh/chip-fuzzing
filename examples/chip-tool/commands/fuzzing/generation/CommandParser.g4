@@ -21,7 +21,7 @@ obj
     ;
 
 pair
-    : UINT8 COLON value
+    : FIELD_ID COLON value
     ;
 
 arr

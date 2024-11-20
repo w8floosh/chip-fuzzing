@@ -1,6 +1,6 @@
 #include "Visitors.h"
-#include "DeviceStateManager.h"
-#include "Fuzzing.h"
+#include "DeviceStateTracker.h"
+#include "Fuzzer.h"
 #include "tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
 #include <app-common/zap-generated/ids/Clusters.h>
@@ -101,7 +101,7 @@ void Visitors::TLV::ProcessDescriptorClusterResponse(std::shared_ptr<DecodedTLVE
                 auto container = std::get<ContainerType>(arg[0]->content);
                 for (const auto & element : container)
                 {
-                    auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+                    auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateTracker();
                     if constexpr (std::is_same_v<T, EndpointId>)
                     {
                         deviceState->Add(node, ConvertToIdType<EndpointId>(element));
@@ -164,7 +164,7 @@ void Visitors::TLV::ProcessBasicInformationClusterResponse(std::shared_ptr<Decod
             // The only containers the basic information cluster returns are CapabilityMinima and ProductAppearance, which we don't
             // care about.
             BasicInformation info;
-            auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+            auto * deviceState = fuzz::Fuzzer::GetInstance()->GetDeviceStateTracker();
 
             if constexpr (std::is_same_v<arg_t, ContainerType>)
                 return;

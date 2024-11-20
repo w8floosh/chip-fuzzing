@@ -366,17 +366,20 @@ CHIP_ERROR InteractiveStartCommand::RunCommand()
 
     char * command = nullptr;
     int status;
-    char * subscribe = "any subscribe-by-id 6 0 0 -1 0xc 1";
-    ParseCommand(subscribe, &status);
+    char * subscribe6 = "any subscribe-by-id 6 0x0,0x4000,0x4001,0x4002,0x4003 0 -1 0xc 1";
+    char * subscribe3 = "any subscribe-by-id 3 0,1 0 -1 0xc 1";
+    char * zero6      = "any command-by-id 6 0 {} 0xc 1";
+    char * one6       = "any command-by-id 6 1 {} 0xc 1";
+    char * zero3      = "any command-by-id 3 0 {\"0\":\"1\"} 0xc 1";
+    char * zero3a     = "any command-by-id 3 0 {\"0\":\"0\"} 0xc 1";
+    ParseCommand(subscribe6, &status);
+    ParseCommand(subscribe3, &status);
     while (true)
     {
         // command = GetCommand(command);
-        char * zero = "any command-by-id 6 0 {} 0xc 1";
-        char * one  = "any command-by-id 6 1 {} 0xc 1";
-        command =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 2
-            ? zero
-            : one;
+        auto time =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        command = time % 2 ? zero6 : (time % 3 ? zero3 : (time % 5 ? zero3a : one6));
         if (command != nullptr && !ParseCommand(command, &status))
             break;
     }

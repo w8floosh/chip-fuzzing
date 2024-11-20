@@ -1,5 +1,5 @@
 #include "InputGenerator.h"
-#include "../DeviceStateManager.h"
+#include "../DeviceStateTracker.h"
 #include "../Visitors.h"
 #include "../tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
@@ -99,7 +99,7 @@ std::string convertHexToDecimal(std::string json)
 }
 } // namespace
 namespace gen = chip::fuzzing::generation;
-void gen::InputGenerator::CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node)
+void gen::InputGenerator::CreateGrammar(DeviceStateTracker * deviceState, chip::NodeId node)
 {
     VerifyOrReturn(!fs::exists(mGeneratedLexerPath) && !fs::exists(mGeneratedParserPath));
 
