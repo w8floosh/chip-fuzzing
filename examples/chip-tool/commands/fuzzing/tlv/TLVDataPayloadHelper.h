@@ -1,5 +1,5 @@
 #pragma once
-#include "../DeviceStateManager.h"
+#include "../DeviceStateTracker.h"
 #include "../ForwardDeclarations.h"
 #include "DecodedTLVElement.h"
 

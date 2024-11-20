@@ -1,4 +1,4 @@
-#include "DeviceStateManager.h"
+#include "DeviceStateTracker.h"
 #include "Visitors.h"
 #include "tlv/DecodedTLVElement.h"
 #include <app-common/zap-generated/ids/Attributes.h>
@@ -178,7 +178,7 @@ fuzz::ClusterState * fuzz::DeviceState::operator()(NodeId node, EndpointId endpo
     return ReadValueOrNull((*this)(node, endpoint)->clusters, cluster);
 }
 
-const fuzz::AnyType & fuzz::DeviceStateManager::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster,
+const fuzz::AnyType & fuzz::DeviceStateTracker::ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster,
                                                               AttributeId attribute, bool current)
 {
     VerifyOrReturnValue(mDeviceState(node, endpoint, cluster) != nullptr, kInvalidValue);
@@ -186,13 +186,13 @@ const fuzz::AnyType & fuzz::DeviceStateManager::ReadAttribute(NodeId node, Endpo
     VerifyOrReturnValue(attributeState != nullptr, kInvalidValue);
     return current ? attributeState->ReadCurrent() : attributeState->ReadLast();
 }
-fuzz::AttributeState & fuzz::DeviceStateManager::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
+fuzz::AttributeState & fuzz::DeviceStateTracker::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
                                                                    AttributeId attribute)
 {
     return ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
 }
 
-void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
+void fuzz::DeviceStateTracker::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
                                               AnyType && aValue)
 {
     VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
@@ -201,14 +201,14 @@ void fuzz::DeviceStateManager::WriteAttribute(NodeId node, EndpointId endpoint, 
 }
 
 // TODO: Consider variadic refactoring
-void fuzz::DeviceStateManager::Add(NodeId node)
+void fuzz::DeviceStateTracker::Add(NodeId node)
 {
     VerifyOrReturn(mDeviceState(node) == nullptr);
     NodeState state{};
     VerifyOrDie(mDeviceState.nodes.emplace(node, state).second);
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, BasicInformation aInfo)
+void fuzz::DeviceStateTracker::Add(NodeId node, BasicInformation aInfo)
 {
     if (mDeviceState(node) == nullptr)
     {
@@ -249,7 +249,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, BasicInformation aInfo)
     }
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
+void fuzz::DeviceStateTracker::Add(NodeId node, EndpointId endpoint)
 {
     VerifyOrReturn(endpoint != kInvalidEndpointId);
     VerifyOrReturn((mDeviceState(node) != nullptr) && (mDeviceState(node, endpoint) == nullptr));
@@ -258,7 +258,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint)
     VerifyOrDie(mDeviceState(node)->endpoints.emplace(endpoint, state).second);
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeStruct deviceType)
+void fuzz::DeviceStateTracker::Add(NodeId node, EndpointId endpoint, DeviceTypeStruct deviceType)
 {
     VerifyOrReturn((endpoint != kInvalidEndpointId) && (deviceType.id != kInvalidClusterId));
     VerifyOrReturn(mDeviceState(node) != nullptr);
@@ -275,7 +275,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, DeviceTypeS
     }
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, uint16_t revision)
+void fuzz::DeviceStateTracker::Add(NodeId node, EndpointId endpoint, ClusterId cluster, uint16_t revision)
 {
     VerifyOrReturn((endpoint != kInvalidEndpointId) && (cluster != kInvalidClusterId));
     VerifyOrReturn((mDeviceState(node, endpoint) != nullptr) && (mDeviceState(node, endpoint, cluster) == nullptr));
@@ -285,7 +285,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
     VerifyOrDie(mDeviceState(node, endpoint)->clusters.emplace(cluster, state).second);
 }
 
-void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
+void fuzz::DeviceStateTracker::Add(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute)
 {
     VerifyOrReturn((endpoint != kInvalidEndpointId) && (cluster != kInvalidClusterId) && (attribute != kInvalidAttributeId));
     VerifyOrReturn((mDeviceState(node, endpoint, cluster) != nullptr) &&
@@ -300,7 +300,7 @@ void fuzz::DeviceStateManager::Add(NodeId node, EndpointId endpoint, ClusterId c
  * Dumping the device state is a costly operation, as the function traverses and copies the whole device state inside a std::map to
  * dump the keys in ascending order.
  */
-CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> commandHistory)
+CHIP_ERROR fuzz::DeviceStateTracker::Dump(std::vector<CommandHistoryEntry> commandHistory)
 {
     // TODO: Add dumping for events and events history
     auto now    = std::chrono::system_clock::now();
@@ -346,6 +346,9 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> comma
                 for (auto & [attributeId, attributeState] :
                      std::map<AttributeId, AttributeState>(attributes.begin(), attributes.end()))
                 {
+                    // Do not print global attributes
+                    if (attributeId >= 0xFFF0)
+                        continue;
                     if (!attributeState.IsReadable())
                     {
                         emitter << YAML::Key << attributeId << YAML::Value << "unreadable";
@@ -388,11 +391,16 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> comma
         emitter << YAML::Key << "history" << YAML::Value << YAML::BeginSeq;
         for (const auto & entry : commandHistory)
         {
+            bool explorationCommand = entry.index >= 0x8000000000000000;
             emitter << YAML::BeginMap;
+            emitter << YAML::Key << "id" << YAML::Value
+                    << (explorationCommand ? ("E-" + std::to_string(entry.index & 0xFFFFFFFF))
+                                           : std::to_string(entry.index & 0xFFFFFFFF));
             emitter << YAML::Key << "command" << YAML::Value << entry.command;
             emitter << YAML::Key << "statusResponse" << YAML::Value << YAML::Hex << entry.statusResponse.AsInteger();
-            emitter << YAML::Key << "oracleStatus" << YAML::Value << YAML::Hex << static_cast<uint8_t>(entry.oracleStatus)
-                    << YAML::Dec;
+            emitter << YAML::Key << "oracleStatus" << YAML::Value << YAML::Hex << static_cast<uint16_t>(entry.oracleStatus);
+            if (!explorationCommand)
+                emitter << YAML::Key << "fuzzerPhase" << YAML::Value << YAML::Hex << static_cast<uint16_t>(entry.fuzzerPhase);
             emitter << YAML::EndMap;
         }
         emitter << YAML::EndSeq;
@@ -408,7 +416,7 @@ CHIP_ERROR fuzz::DeviceStateManager::Dump(std::vector<CommandHistoryEntry> comma
     return CHIP_NO_ERROR;
 }
 
-CHIP_ERROR fuzz::DeviceStateManager::Load(fs::path src)
+CHIP_ERROR fuzz::DeviceStateTracker::Load(fs::path src)
 {
     VerifyOrReturnError(fs::exists(src), CHIP_ERROR_OPEN_FAILED);
     YAML::Node root = YAML::LoadFile(src.string());
@@ -440,7 +448,7 @@ CHIP_ERROR fuzz::DeviceStateManager::Load(fs::path src)
     return CHIP_NO_ERROR;
 }
 
-size_t fuzz::DeviceStateManager::GetTotalCommands()
+size_t fuzz::DeviceStateTracker::GetTotalCommands()
 {
     size_t totalCommands = 0;
     for (const auto & [nodeId, nodeState] : *List())
@@ -464,7 +472,7 @@ size_t fuzz::DeviceStateManager::GetTotalCommands()
     return totalCommands;
 }
 
-size_t fuzz::DeviceStateManager::GetTotalAttributes()
+size_t fuzz::DeviceStateTracker::GetTotalAttributes()
 {
     size_t totalAttributes = 0;
     for (const auto & [nodeId, nodeState] : *List())

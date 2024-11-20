@@ -1,5 +1,5 @@
 #include "FuzzingCommands.h"
-#include "DeviceStateManager.h"
+#include "DeviceStateTracker.h"
 #include "Oracle.h"
 #include "Utils.h"
 #include "Visitors.h"
@@ -56,33 +56,36 @@ inline std::string GetSubscribeAllClusterAttributesCommand(chip::NodeId node, ch
         .append(" -1 ")
         .append(std::to_string(node))
         .append(" ")
-        .append(std::to_string(endpoint));
+        .append(std::to_string(endpoint))
+        .append(" --keepSubscriptions true");
     return kCommand;
 }; // subscribes to all attributes
 } // namespace
 
 void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
 {
-    CHIP_ERROR contextError = CHIP_NO_ERROR;
     auto fuzzer             = fuzz::Fuzzer::GetInstance();
     fuzzer->mCurrentCommand = command;
-    *status                 = mHandler->RunFuzzing(command);
+    bool needsLog =
+        fuzzer->CurrentPhase() == fuzz::FuzzerPhase::TESTING || fuzzer->CurrentPhase() == fuzz::FuzzerPhase::EXPLORATION;
 
-    VerifyOrReturn(CHIP_ERROR_INVALID_ARGUMENT != *status,
-                   ChipLogError(chipFuzzer, "Could not parse command string correctly. Test case was skipped."));
+    *status = mHandler->RunFuzzing(command);
+
+    if (CHIP_ERROR_INVALID_ARGUMENT == *status)
+    {
+        ChipLogError(chipFuzzer, "Could not parse command string correctly. Skipping test case.");
+        fuzzer->GetStateMonitor()->TrackSkipped();
+        return;
+    }
 
     auto contextManager = fuzzer->GetContextManager();
-    contextError        = contextManager->Finalize(fuzzer->CurrentPhase() == fuzz::FuzzerPhase::TESTING);
-    if (CHIP_NO_ERROR != contextError)
+    LogErrorOnFailure(contextManager->WaitForSubscriptionReport());
+
+    if (contextManager->IsInitialized())
     {
-        ChipLogError(chipFuzzer, "Context finalization failure: %s", chip::ErrorStr(contextError));
+        VerifyOrDie(CHIP_NO_ERROR == contextManager->Close(needsLog));
     }
-    contextError = contextManager->Close();
-    if (CHIP_NO_ERROR != contextError || contextManager->IsInitialized())
-    {
-        ChipLogError(chipFuzzer, "Could not terminate current fuzzer context gracefully. Forcing close.");
-        VerifyOrDie(CHIP_NO_ERROR == contextManager->Close(true));
-    }
+
     if (fuzzer->mCurrentPhase != fuzz::FuzzerPhase::INITIALIZATION && fuzzer->mCurrentPhase != fuzz::FuzzerPhase::ACQUISITION)
         fuzzer->AppendToHistory(command, *status);
 }
@@ -90,22 +93,20 @@ void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
 bool FuzzingStartCommand::TestTCPServerSupport()
 {
     auto fuzzer             = fuzz::Fuzzer::GetInstance();
-    auto deviceStateManager = fuzzer->GetDeviceStateManager();
+    auto DeviceStateTracker = fuzzer->GetDeviceStateTracker();
 
     CHIP_ERROR err = CHIP_NO_ERROR;
-    VerifyOrDie(deviceStateManager->List(mDestinationId) && !!(deviceStateManager->List(mDestinationId)->size()));
-    for (auto & [endpointId, _] : *deviceStateManager->List(mDestinationId))
+    VerifyOrDie(DeviceStateTracker->List(mDestinationId) && !!(DeviceStateTracker->List(mDestinationId)->size()));
+    for (auto & [endpointId, _] : *DeviceStateTracker->List(mDestinationId))
     {
-        VerifyOrDie(deviceStateManager->List(mDestinationId, endpointId) &&
-                    !!(deviceStateManager->List(mDestinationId, endpointId)->size()));
-        for (auto & [clusterId, _] : *deviceStateManager->List(mDestinationId, endpointId))
+        VerifyOrDie(DeviceStateTracker->List(mDestinationId, endpointId) &&
+                    !!(DeviceStateTracker->List(mDestinationId, endpointId)->size()));
+        for (auto & [clusterId, _] : *DeviceStateTracker->List(mDestinationId, endpointId))
         {
-            auto commandList = deviceStateManager->ReadAttribute(mDestinationId, endpointId, clusterId,
+            auto commandList = DeviceStateTracker->ReadAttribute(mDestinationId, endpointId, clusterId,
                                                                  chip::app::Clusters::Globals::Attributes::AcceptedCommandList::Id);
-            if (std::holds_alternative<std::monostate>(commandList))
-            {
+            if (!std::holds_alternative<fuzz::ContainerType>(commandList) || !std::get<fuzz::ContainerType>(commandList).size())
                 continue;
-            }
 
             auto firstCommand      = std::get<fuzz::ContainerType>(commandList).front();
             auto commandId         = chip::fuzzing::Visitors::TLV::ConvertToIdType<uint32_t>(firstCommand);
@@ -152,7 +153,7 @@ CHIP_ERROR FuzzingStartCommand::AcquireBasicInformation()
 CHIP_ERROR FuzzingStartCommand::AddOracleRules(chip::Optional<fs::path> dependencyTestFile)
 {
     auto fuzzer               = fuzz::Fuzzer::GetInstance();
-    auto deviceState          = fuzzer->GetDeviceStateManager();
+    auto deviceState          = fuzzer->GetDeviceStateTracker();
     auto oracle               = fuzzer->GetOracle();
     auto specificationEncoder = fuzzer->GetSpecificationEncoder();
     for (auto & [endpointId, _] : *deviceState->List(mDestinationId))
@@ -191,7 +192,7 @@ FuzzingStartCommand::AcquireRemoteDataModel()
 {
     // Access to the device state manager is required to add the new node and list the endpoints.
     auto fuzzer                            = fuzz::Fuzzer::GetInstance();
-    fuzz::DeviceStateManager * deviceState = fuzzer->GetDeviceStateManager();
+    fuzz::DeviceStateTracker * deviceState = fuzzer->GetDeviceStateTracker();
     CHIP_ERROR status                      = CHIP_NO_ERROR;
     deviceState->Add(mDestinationId);
 
@@ -233,7 +234,7 @@ FuzzingStartCommand::AcquireRemoteDataModel()
 
 CHIP_ERROR FuzzingStartCommand::SubscribeAttributes()
 {
-    auto deviceState  = fuzz::Fuzzer::GetInstance()->GetDeviceStateManager();
+    auto deviceState  = fuzz::Fuzzer::GetInstance()->GetDeviceStateTracker();
     CHIP_ERROR status = CHIP_NO_ERROR;
 
     for (auto & endpoint : *deviceState->List(mDestinationId))
@@ -274,33 +275,34 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     CHIP_ERROR status                   = CHIP_NO_ERROR;
     CHIP_ERROR finalStatus              = CHIP_NO_ERROR;
     auto fuzzer                         = fuzz::Fuzzer::GetInstance();
-    auto deviceStateManager             = fuzzer->GetDeviceStateManager();
+    auto DeviceStateTracker             = fuzzer->GetDeviceStateTracker();
 
     fuzzer->GoToNextPhase();
 
     ReturnErrorOnFailure(AcquireRemoteDataModel());
 
-    auto * endpointList = deviceStateManager->List(mDestinationId);
+    auto * endpointList = DeviceStateTracker->List(mDestinationId);
     VerifyOrReturnError(endpointList, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
     ReturnErrorOnFailure(AcquireBasicInformation());
     mDestinationSupportsTCPServer = TestTCPServerSupport();
     ReturnErrorOnFailure(SubscribeAttributes());
 
-    const fuzz::BasicInformation * nodeInfo = deviceStateManager->GetNodeInformation(mDestinationId);
+    const fuzz::BasicInformation * nodeInfo = DeviceStateTracker->GetNodeInformation(mDestinationId);
 
     fuzz::generation::InputGenerator inputGenerator(nodeInfo, generatedGrammarsDirectory.string());
-    inputGenerator.CreateGrammar(deviceStateManager, mDestinationId);
+    inputGenerator.CreateGrammar(DeviceStateTracker, mDestinationId);
     fs::path testcasesFile = generatedGrammarsDirectory / inputGenerator.mGrammarId / "tmp" / "tests.txt";
     if (!fs::exists(testcasesFile))
     {
-        inputGenerator.GenerateTestCases(testcasesFile, mTests, 18);
+        inputGenerator.GenerateTestCases(testcasesFile, mTests);
     }
 
     fs::path dependencyTestcasesFile = generatedGrammarsDirectory / inputGenerator.mGrammarId / "tmp" / "dependency_tests.txt";
-    inputGenerator.GenerateTestCases(dependencyTestcasesFile, deviceStateManager->GetTotalCommands() * 16, 18);
+    inputGenerator.GenerateTestCases(dependencyTestcasesFile, 32 * DeviceStateTracker->GetTotalCommands());
     fuzzer->GoToNextPhase();
 
+    fuzzer->mTestId = 0x8000000000000000; // the first bit indicates it is an exploration test
     ReturnErrorOnFailure(AddOracleRules(chip::Optional<fs::path>::Value(dependencyTestcasesFile)));
     VerifyOrDie(fs::remove(dependencyTestcasesFile.c_str()));
     fuzzer->GoToNextPhase();
@@ -314,6 +316,7 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
      */
     std::string generatedArgs;
 
+    fuzzer->mTestId = 0; // reset the first bit to indicate a real test
     while (std::getline(file, generatedArgs))
     {
         std::string command = "any command-by-id ";
@@ -327,7 +330,6 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
             finalStatus = CHIP_ERROR_UNEXPECTED_EVENT;
             break;
         }
-        fuzzer->mTestIndex++;
     }
     file.close();
 
@@ -342,11 +344,12 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     }
 
     fuzzer->GetStateMonitor()->DumpTelemetry();
-    deviceStateManager->Dump(fuzzer->mCommandHistory);
+    DeviceStateTracker->Dump(fuzzer->mCommandHistory);
     ChipLogProgress(chipFuzzer, "Fuzzing telemetry and device state was dumped in the output folder.");
     ChipLogProgress(chipFuzzer, "Cleaning up data allocated by the fuzzer...");
     // fuzzer->Cleanup();
 
+    LogErrorOnFailure(chip::DeviceLayer::PlatformMgr().ScheduleWork(ExecuteDeferredCleanups, 0));
     SetCommandExitStatus(CHIP_NO_ERROR);
     return CHIP_NO_ERROR;
 };

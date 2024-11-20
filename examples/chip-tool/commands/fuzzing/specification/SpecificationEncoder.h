@@ -11,8 +11,8 @@ namespace specification {
 struct CommandSpecification
 {
     std::map<uint8_t, const std::pair<chip::TLV::TLVType, uint8_t>> requiredCommandFields;
-    std::unordered_set<IMStatus> inferredPossibleErrors     = { IMStatus::Success };
-    chip::Optional<std::array<int64_t, 2>> constraintLimits = chip::NullOptional;
+    std::unordered_set<CHIP_ERROR, utils::SetKeyHasher> inferredPossibleErrors = { CHIP_NO_ERROR };
+    chip::Optional<std::array<int64_t, 2>> constraintLimits                    = chip::NullOptional;
     // TODO: std::unordered_map<IMStatus, Json::Value> malformedPayloadExamples;
 };
 
@@ -24,12 +24,11 @@ struct AttributeSpecification
     std::string acl                                         = "rw";
     // TODO: std::string conformance;
 };
-
 class SpecificationEncoder
 {
 public:
     SpecificationEncoder() = delete;
-    SpecificationEncoder(NodeId & dst, FuzzingCommand * handler) : mTarget(dst), mCommandHandler(handler) {}
+    SpecificationEncoder(FuzzingCommand * handler) : mCommandHandler(handler) {}
     CHIP_ERROR
     TryInferCommandSpecification(chip::EndpointId endpoint, chip::ClusterId cluster, chip::CommandId command,
                                  fs::path dependencyTestFile, bool enableTCP = false);
@@ -41,7 +40,7 @@ public:
     {
         return CHIP_ERROR_NOT_IMPLEMENTED;
     }
-    std::unordered_set<IMStatus> & GetExpectedErrors(chip::app::ConcreteCommandPath comPath)
+    std::unordered_set<CHIP_ERROR, utils::SetKeyHasher> & GetExpectedErrors(chip::app::ConcreteCommandPath comPath)
     {
         return mCommandSpecifications[comPath].inferredPossibleErrors;
     }
@@ -55,7 +54,6 @@ public:
     }
 
 private:
-    NodeId & mTarget;
     FuzzingCommand * mCommandHandler;
     std::unordered_map<chip::app::ConcreteCommandPath, CommandSpecification, utils::MapKeyHasher> mCommandSpecifications;
     std::unordered_map<chip::app::ConcreteDataAttributePath, chip::NullOptionalType, utils::MapKeyHasher> mAttributeSpecifications;

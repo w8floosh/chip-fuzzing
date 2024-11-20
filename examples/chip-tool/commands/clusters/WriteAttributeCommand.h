@@ -156,7 +156,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return InteractionModelWriter::WriteAttribute(device, endpointIds, clusterIds, attributeIds, values);
     }

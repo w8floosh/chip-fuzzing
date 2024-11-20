@@ -29,6 +29,8 @@ struct SetKeyHasher
         return std::hash<chip::EndpointId>{}(path.mEndpointId) ^ std::hash<chip::ClusterId>{}(path.mClusterId) ^
             std::hash<chip::AttributeId>{}(path.mAttributeId);
     }
+
+    std::size_t operator()(const CHIP_ERROR & err) const { return std::hash<uint32_t>{}(err.AsInteger()); }
 };
 
 using DataAttributePathSet = std::unordered_set<chip::app::ConcreteDataAttributePath, SetKeyHasher>;

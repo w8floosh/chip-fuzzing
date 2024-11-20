@@ -258,7 +258,6 @@ private:
     std::condition_variable cvWaitingForResponse;
     std::mutex cvWaitingForResponseMutex;
     bool mWaitingForResponse{ true };
-    bool mWaitingForSubscriptionData{ false };
 #endif // CONFIG_USE_SEPARATE_EVENTLOOP
 
     void StartTracing();

@@ -1,5 +1,5 @@
 #include "SpecificationEncoder.h"
-#include "../Fuzzing.h"
+#include "../Fuzzer.h"
 #include "../FuzzingCommands.h"
 #include "../generation/InputGenerator.h"
 #include <fstream>
@@ -79,8 +79,8 @@ CHIP_ERROR spec::SpecificationEncoder::TryInferCommandSpecification(chip::Endpoi
             continue;
 
         mCommandHandler->ExecuteCommand(commandStr.c_str(), &err);
-        chip::app::StatusIB statusResponse(err);
-        mCommandSpecifications[analyzedComPath].inferredPossibleErrors.emplace(statusResponse.mStatus);
+        mCommandSpecifications[analyzedComPath].inferredPossibleErrors.emplace(err);
+        fuzz::Fuzzer::GetInstance()->GetStateMonitor()->TrackError(err);
     }
 
     return CHIP_NO_ERROR;
@@ -144,7 +144,7 @@ CHIP_ERROR spec::SpecificationEncoder::ShuffleClusterState(fs::path dependencyTe
 {
     ChipLogProgress(chipFuzzer, "Shuffling state of cluster (%d, %d) to test dependencies of the command %d...",
                     analyzedComPath.mEndpointId, analyzedComPath.mClusterId, analyzedComPath.mCommandId);
-
+    int consecutiveTimeouts = 0;
     std::ifstream dependencyTestFile(dependencyTestFilePath);
 
     // The clusterCommands file is used to write the lines that do not match commands belonging to the same cluster of the
@@ -158,6 +158,7 @@ CHIP_ERROR spec::SpecificationEncoder::ShuffleClusterState(fs::path dependencyTe
     // new file.
     if (!fs::exists(clusterCommandsFilePath))
     {
+        auto fuzzer = chip::fuzzing::Fuzzer::GetInstance();
         std::ofstream clusterCommandsFile(clusterCommandsFilePath);
         std::string generatedArgs;
         // This loop consumes the generated test cases from the file and organizes the resulting commands inside a map if they
@@ -165,7 +166,7 @@ CHIP_ERROR spec::SpecificationEncoder::ShuffleClusterState(fs::path dependencyTe
         while (std::getline(dependencyTestFile, generatedArgs))
         {
             std::string subcommand = "any command-by-id ";
-            std::string scArgs     = generation::InputGenerator::ParseTestCase(mTarget, generatedArgs);
+            std::string scArgs     = generation::InputGenerator::ParseTestCase(fuzzer->CurrentDestination(), generatedArgs);
             std::istringstream iss(scArgs);
             std::string scNode, scEndpoint, scCluster, scCommand, scPayload;
             iss >> scCluster >> scCommand >> scPayload >> scNode >> scEndpoint;
@@ -239,11 +240,28 @@ CHIP_ERROR spec::SpecificationEncoder::ShuffleClusterState(fs::path dependencyTe
             std::string subcommandWithDefaults = scCommandSet + " " + scOperation + " " + scCluster + " " + scCommand + " " +
                 scPayload + " " + scNode + " " + scEndpoint;
             mCommandHandler->ExecuteCommand(subcommandWithDefaults.c_str(), &subCommandErr);
-            VerifyOrReturnError(subCommandErr != CHIP_ERROR_TIMEOUT, CHIP_ERROR_TIMEOUT);
+            fuzz::Fuzzer::GetInstance()->GetStateMonitor()->TrackError(subCommandErr);
+            if (subCommandErr == CHIP_ERROR_TIMEOUT)
+            {
+                consecutiveTimeouts++;
+                if (consecutiveTimeouts > 1)
+                {
+                    return CHIP_ERROR_TIMEOUT;
+                }
+            }
+            else
+                consecutiveTimeouts = 0;
         }
         mCommandHandler->ExecuteCommand(subcommand.c_str(), &subCommandErr);
-        VerifyOrReturnError(subCommandErr != CHIP_ERROR_TIMEOUT, CHIP_ERROR_TIMEOUT);
-        // TODO: Find a way to separate commands executed in the exploration phase and the ones executed in the testing.
+        fuzz::Fuzzer::GetInstance()->GetStateMonitor()->TrackError(subCommandErr);
+        if (subCommandErr == CHIP_ERROR_TIMEOUT)
+        {
+            consecutiveTimeouts++;
+            if (consecutiveTimeouts > 1)
+                return CHIP_ERROR_TIMEOUT;
+        }
+        else
+            consecutiveTimeouts = 0;
     }
     return CHIP_NO_ERROR;
 }
