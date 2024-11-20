@@ -1,12 +1,11 @@
 #pragma once
-#include "../DeviceStateManager.h"
+#include "../DeviceStateTracker.h"
 #include "../ForwardDeclarations.h"
 #include <fstream>
 
 namespace chip {
 namespace fuzzing {
 namespace generation {
-// TODO: Rename this to InputGenerator
 
 class InputGenerator
 {
@@ -22,24 +21,25 @@ public:
         {
             VerifyOrDie(fs::create_directories(baseDir));
         }
-        mGrammarId                    = filename.str();
-        fs::path mGrammarSubdirectory = baseDir / mGrammarId;
-        if (!fs::exists(mGrammarSubdirectory))
+        mGrammarId      = filename.str();
+        mTargetDataPath = baseDir / mGrammarId;
+        if (!fs::exists(mTargetDataPath))
         {
-            VerifyOrDie(fs::create_directories(mGrammarSubdirectory));
+            VerifyOrDie(fs::create_directories(mTargetDataPath));
         }
-        mGeneratedLexerPath  = mGrammarSubdirectory / (mGrammarId + "_Lexer.g4");
-        mGeneratedParserPath = mGrammarSubdirectory / (mGrammarId + "_Parser.g4");
+
+        mGeneratedLexerPath  = mTargetDataPath / (mGrammarId + "_Lexer.g4");
+        mGeneratedParserPath = mTargetDataPath / (mGrammarId + "_Parser.g4");
         SetPythonExecutable();
         VerifyOrDieWithMsg(IsGrammarinatorInstalled(), chipFuzzer,
                            "Python package 'grammarinator' is required for fuzzer grammar generation.");
     };
-    ~InputGenerator() = default;
+    ~InputGenerator() { fs::remove_all(mTargetDataPath / "tmp"); };
 
     std::string mGrammarId;
 
-    void CreateGrammar(DeviceStateManager * deviceState, chip::NodeId node);
-    void GenerateTestCases(fs::path outDir, size_t numCases, uint16_t maxDepth = 12);
+    void CreateGrammar(DeviceStateTracker * deviceState, chip::NodeId node);
+    void GenerateTestCases(fs::path outDir, size_t numCases, uint16_t maxDepth = 32);
     // Removes duplicate keys from the test case payload and converts all keys from hex to decimal.
     static std::string ParseTestCase(chip::NodeId node, std::string testCase);
 
@@ -48,6 +48,7 @@ private:
     fs::path mBaseParserPath;
     fs::path mGeneratedLexerPath;
     fs::path mGeneratedParserPath;
+    fs::path mTargetDataPath;
     std::string mPythonExecutable;
     std::string mEnvPrefix;
 

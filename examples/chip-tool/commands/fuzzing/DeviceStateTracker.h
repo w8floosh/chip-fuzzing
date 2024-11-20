@@ -149,10 +149,10 @@ public:
 };
 
 /**
- * @class DeviceStateManager
+ * @class DeviceStateTracker
  * @brief Manages the state of devices and provides methods for accessing and modifying device attributes.
  *
- * The DeviceStateManager class is responsible for tracking and managing the state of devices. It provides methods for
+ * The DeviceStateTracker class is responsible for tracking and managing the state of devices. It provides methods for
  * retrieving and setting attributes of a device, as well as accessing the clusters associated with a device's
  * endpoint.
  *
@@ -160,17 +160,17 @@ public:
  *
  * TODO: Extend this to manage state of groups of devices.
  */
-class DeviceStateManager
+class DeviceStateTracker
 {
 public:
-    DeviceStateManager(fs::path dumpDir) : mDumpDirectory(dumpDir)
+    DeviceStateTracker(fs::path dumpDir) : mDumpDirectory(dumpDir)
     {
         if (!fs::exists(mDumpDirectory))
         {
             VerifyOrDie(fs::create_directory(mDumpDirectory));
         }
     };
-    ~DeviceStateManager() {};
+    ~DeviceStateTracker() {};
 
     const AnyType & ReadAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute, bool current = true);
     AttributeState & GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute);
@@ -239,9 +239,11 @@ private:
 
 struct CommandHistoryEntry
 {
+    size_t index;
     std::string command;
     CHIP_ERROR statusResponse;
     OracleStatus oracleStatus;
+    fuzz::FuzzerPhase fuzzerPhase;
 };
 } // namespace fuzzing
 } // namespace chip

@@ -22,7 +22,7 @@
 
 #if CONFIG_USE_BLACKBOX_FUZZING
 #include "../fuzzing/ForwardDeclarations.h"
-#include "../fuzzing/Fuzzing.h"
+#include "../fuzzing/Fuzzer.h"
 #include "../fuzzing/Utils.h"
 #include <thread>
 #endif // CONFIG_USE_BLACKBOX_FUZZING
@@ -41,10 +41,7 @@ public:
                          const chip::app::StatusIB & status) override
     {
         if (IsFuzzing())
-        {
-            // TODO: When reports from subscriptions come, this callback is called. Check for subscriptionId here
             fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->ProcessReportData(data, path, status);
-        }
 
         CHIP_ERROR error = status.ToChipError();
         if (CHIP_NO_ERROR != error)
@@ -52,14 +49,9 @@ public:
             LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(path, status));
 
             ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
+            mError = error;
             if (IsFuzzing())
-            {
                 fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(path, status);
-            }
-            else
-            {
-                mError = error;
-            }
             return;
         }
 
@@ -67,6 +59,8 @@ public:
         {
             ChipLogError(chipTool, "Response Failure: No Data");
             mError = CHIP_ERROR_INTERNAL;
+            if (IsFuzzing())
+                fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(path, status);
             return;
         }
 
@@ -77,6 +71,8 @@ public:
         {
             ChipLogError(chipTool, "Response Failure: Can not decode Data");
             mError = error;
+            if (IsFuzzing())
+                fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(path, status);
             return;
         }
     }
@@ -85,9 +81,7 @@ public:
                      const chip::app::StatusIB * status) override
     {
         if (IsFuzzing())
-        {
             fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->ProcessReportData(eventHeader, data, status);
-        }
 
         if (status != nullptr)
         {
@@ -99,6 +93,11 @@ public:
                 ChipLogError(chipTool, "Response Failure: %s", chip::ErrorStr(error));
                 mError = error;
 
+                if (IsFuzzing())
+                {
+                    // TODO
+                    // fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(eventHeader, status);
+                }
                 return;
             }
         }
@@ -107,6 +106,11 @@ public:
         {
             ChipLogError(chipTool, "Response Failure: No Data");
             mError = CHIP_ERROR_INTERNAL;
+            if (IsFuzzing())
+            {
+                // TODO
+                // fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(eventHeader, status);
+            }
             return;
         }
 
@@ -117,21 +121,23 @@ public:
         {
             ChipLogError(chipTool, "Response Failure: Can not decode Data");
             mError = error;
-            return;
+            if (IsFuzzing())
+            {
+                // TODO
+                // fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeReportError(eventHeader, status);
+            }
         }
     }
 
     void OnError(CHIP_ERROR error) override
     {
-        if (IsFuzzing())
-        {
-            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeCommandError(
-                chip::Protocols::InteractionModel::MsgType::ReportData, error);
-        }
         LogErrorOnFailure(RemoteDataModelLogger::LogErrorAsJSON(error));
 
         ChipLogProgress(chipTool, "Error: %s", chip::ErrorStr(error));
         mError = error;
+        if (IsFuzzing())
+            fuzz::Fuzzer::GetInstance()->GetCallbackInterceptor()->AnalyzeCommandError(
+                chip::Protocols::InteractionModel::MsgType::ReportData, error);
     }
 
     void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override
@@ -180,9 +186,8 @@ protected:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            LogErrorOnFailure(contextManager->Update(&mError));
+            LogErrorOnFailure(contextManager->OnNonInvokeResponse());
             mProcessedDataAttributePathSet.clear();
-            VerifyOrDie(mProcessedDataAttributePathSet.empty());
         }
     }
 
@@ -206,41 +211,39 @@ protected:
         SetCommandExitStatus(CHIP_NO_ERROR);
     }
 
+    CHIP_ERROR OnResubscriptionNeeded(chip::app::ReadClient * apReadClient, CHIP_ERROR aTerminationCause) override
+    {
+        if (IsFuzzing())
+            ChipLogError(chipFuzzer, "Resubscription needed for client %p, termination cause %s", apReadClient,
+                         chip::ErrorStr(aTerminationCause));
+        return ReportCommand::OnResubscriptionNeeded(apReadClient, aTerminationCause);
+    }
+
     void OnReportBegin() override
     {
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            if (contextManager->CurrentStatus() == fuzz::FuzzerContextStatus::NON_INVOKE_REQUEST)
-                LogErrorOnFailure(contextManager->MoveToState(fuzz::FuzzerContextStatus::NON_INVOKE_RESPONSE));
+            // logs an error when the response is not a report data.
+            LogErrorOnFailure(contextManager->OnNonInvokeResponse());
         }
     }
-
     void OnReportEnd() override
     {
         if (IsFuzzing() && !mSubscriptionEstablished)
         {
-            ChipLogProgress(chipFuzzer, "Subscription data received");
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            // This is helpful because at the subscription establishment this callback may be called and we currently don't care
-            // analyzing that report, so we skip it.
-            if (contextManager->CurrentStatus() == fuzz::FuzzerContextStatus::NON_INVOKE_RESPONSE)
-            {
+            LogErrorOnFailure(contextManager->OnSubscriptionReport(mProcessedDataAttributePathSet));
+            if (mProcessedDataAttributePathSet.size() > 0)
                 mProcessedDataAttributePathSet.clear();
-            }
-            else if (contextManager->CurrentStatus() != fuzz::FuzzerContextStatus::INVOKE_RESPONSE)
-            {
-                ChipLogError(chipFuzzer, "Bad context: incorrect state for receiving subscription data");
-            }
-            else
-            {
-                LogErrorOnFailure(contextManager->Update(mProcessedDataAttributePathSet));
-                mProcessedDataAttributePathSet.clear();
-            }
-
-            LogErrorOnFailure(contextManager->Update(chip::NullOptional, chip::Optional<bool>::Value(false)));
-            ChipLogProgress(chipFuzzer, "Subscription data processed");
         }
+    }
+
+    void OnDeallocatePaths(chip::app::ReadPrepareParams && aReadPrepareParams) override
+    {
+        if (IsFuzzing())
+            ChipLogDetail(chipFuzzer, "Deallocating a subscription");
+        ReportCommand::OnDeallocatePaths(std::move(aReadPrepareParams));
     }
 
     void OnDone(chip::app::ReadClient * aReadClient) override
@@ -307,7 +310,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return ReadCommand::ReadAttribute(device, endpointIds, mClusterIds, mAttributeIds);
     }
@@ -369,7 +372,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeAttribute(device, endpointIds, mClusterIds, mAttributeIds);
@@ -441,7 +444,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return ReadCommand::ReadEvent(device, endpointIds, mClusterIds, mEventIds);
     }
@@ -508,7 +511,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeEvent(device, endpointIds, mClusterIds, mEventIds);
@@ -545,7 +548,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return ReadCommand::ReadNone(device);
     }
@@ -586,7 +589,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return ReadCommand::ReadAll(device, endpointIds, mClusterIds, mAttributeIds, mEventIds);
     }
@@ -621,7 +624,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         return SubscribeCommand::SubscribeNone(device);
     }
@@ -660,7 +663,7 @@ public:
         if (IsFuzzing())
         {
             auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-            ReturnErrorOnFailure(contextManager->Update(device->GetDeviceId(), &mError));
+            ReturnErrorOnFailure(contextManager->OnNonInvokeRequest(device->GetDeviceId()));
         }
         SubscribeCommand::SetPeerLIT(IsPeerLIT());
         return SubscribeCommand::SubscribeAll(device, endpointIds, mClusterIds, mAttributeIds, mEventIds);

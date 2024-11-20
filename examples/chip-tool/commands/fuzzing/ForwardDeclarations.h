@@ -18,7 +18,6 @@ namespace fuzzing {
 
 using IMStatus = chip::Protocols::InteractionModel::Status;
 
-namespace fs = std::filesystem;
 namespace TLV {
 using TLVType = chip::TLV::TLVType;
 using TLVTag  = chip::TLV::TLVTagControl;
@@ -42,7 +41,8 @@ inline uint8_t ExtractSizeFromControlByte(TLVType type, uint16_t controlByte);
 #define CHIP_FUZZER_ERROR_UNINITIALIZED_CONTEXT CHIP_APPLICATION_ERROR(0x40)
 #define CHIP_FUZZER_ERROR_END_OF_CONTEXT CHIP_APPLICATION_ERROR(0x41)
 #define CHIP_FUZZER_ERROR_CONTEXT_LOCKED CHIP_APPLICATION_ERROR(0x42)
-#define CHIP_FUZZER_ERROR_SUBSCRIPTION_RESPONSE_TIMEOUT CHIP_APPLICATION_ERROR(0x43)
+#define CHIP_FUZZER_ERROR_BAD_CONTEXT_STATE CHIP_APPLICATION_ERROR(0x43)
+#define CHIP_FUZZER_ERROR_SUBSCRIPTION_RESPONSE_TIMEOUT CHIP_APPLICATION_ERROR(0x44)
 
 using PrimitiveType = std::variant<std::monostate, bool, char *, float, double, chip::NullOptionalType, int8_t, int16_t, int32_t,
                                    int64_t, uint8_t, uint16_t, uint32_t, uint64_t, std::string>;
@@ -52,7 +52,6 @@ using ContainerType = std::vector<std::shared_ptr<TLV::DecodedTLVElement>>;
 
 namespace generation {
 class InputGenerator;
-const char * GenerateCommandSeedOnly(fs::path seedsDir);
 } // namespace generation
 
 namespace utils {
@@ -72,11 +71,18 @@ class DefaultValueGenerator;
 static const std::vector<std::pair<TLV::TLVType, uint8_t>> supportedTypes;
 } // namespace utils
 
+namespace specification {
+struct CommandSpecification;
+struct AttributeSpecification;
+class SpecificationEncoder;
+} // namespace specification
+
 // Main objects
 class Fuzzer;
-class FuzzerContextManager;
+class ContextManager;
 struct FuzzerContext;
-class FuzzerContextStatus;
+class ContextStatus;
+enum class FuzzerPhase : uint8_t;
 
 struct AttributeFactory;
 struct AttributeWrapper;
@@ -87,7 +93,7 @@ struct NodeState;
 struct BasicInformation;
 struct DeviceState;
 struct CommandHistoryEntry;
-class DeviceStateManager;
+class DeviceStateTracker;
 class CallbackInterceptor;
 class StateMonitor;
 
@@ -99,3 +105,10 @@ enum class OracleStatus : uint8_t;
 
 } // namespace fuzzing
 } // namespace chip
+
+namespace fuzz  = chip::fuzzing;
+namespace gen   = chip::fuzzing::generation;
+namespace utils = chip::fuzzing::utils;
+namespace spec  = chip::fuzzing::specification;
+namespace TLV   = chip::fuzzing::TLV;
+namespace fs    = std::filesystem;

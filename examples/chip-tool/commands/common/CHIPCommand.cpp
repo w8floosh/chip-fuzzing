@@ -31,7 +31,7 @@
 #include <thread>
 #if CONFIG_USE_BLACKBOX_FUZZING
 #include "../fuzzing/ForwardDeclarations.h"
-#include "../fuzzing/Fuzzing.h"
+#include "../fuzzing/Fuzzer.h"
 #endif // CONFIG_USE_BLACKBOX_FUZZING
 
 #include <string>
@@ -279,7 +279,7 @@ CHIP_ERROR CHIPCommand::Run()
     {
         bool timedOut;
         // Give it 2 hours to run our cleanup; that should never get hit in practice.
-        CHIP_ERROR cleanupErr = RunOnMatterQueue(RunCommandCleanup, chip::System::Clock::Seconds16(7200), &timedOut);
+        CHIP_ERROR cleanupErr = RunOnMatterQueue(RunCommandCleanup, chip::System::Clock::Seconds16(72000), &timedOut);
         VerifyOrDie(cleanupErr == CHIP_NO_ERROR);
         VerifyOrDie(!timedOut);
     }
@@ -592,9 +592,7 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
     {
         /**
          * When the fuzzer is in discovery phase (acquiring data model and basic information as well as subscribing attributes),
-         * it will never wait for subscription reports (waitingForSubscriptionFlag = false) and no context will be initialized.
-         * Context is initialized for the first time at the beginning of the testing phase, when the first ClusterCommand issued
-         * starts creating a context.
+         * it will never wait for subscription reports (needsSubscriptionData = false).
          */
 
         auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
@@ -603,8 +601,7 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
             // Called when no context is available yet or the current context went out of scope.
             contextManager->Initialize(&cvWaitingForResponse, &cvWaitingForResponseMutex, &mWaitingForResponse);
         }
-        ChipLogProgress(chipFuzzer, "Waiting for response...");
-        ReturnErrorOnFailure(contextManager->Update(chip::Optional<bool>::Value(true), chip::NullOptional));
+        ReturnErrorOnFailure(contextManager->RequireResponse());
     }
     else
     {
@@ -618,6 +615,7 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
         if (IsFuzzing())
         {
             ChipLogError(chipFuzzer, "Stopping waiting for response due to error: %s", chip::ErrorStr(err));
+            ReturnErrorOnFailure(fuzz::Fuzzer::GetInstance()->GetContextManager()->NotifyResponse());
         }
         else
         {
@@ -630,9 +628,7 @@ CHIP_ERROR CHIPCommand::RunOnMatterQueue(MatterWorkCallback callback, chip::Syst
     auto waitingUntil = std::chrono::system_clock::now() + std::chrono::duration_cast<std::chrono::seconds>(timeout);
     if (IsFuzzing())
     {
-        auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-        ChipLogProgress(chipFuzzer, "Waiting for context update...");
-        *timedOut = !contextManager->WaitForContextUpdate(waitingUntil);
+        *timedOut = !fuzz::Fuzzer::GetInstance()->GetContextManager()->WaitForResponse(waitingUntil);
         ChipLogProgress(chipFuzzer, "Context updated after command %s.", *timedOut ? "timeout" : "response");
     }
     else
@@ -695,17 +691,16 @@ void CHIPCommand::StopWaiting()
     if (IsFuzzing())
     {
         auto contextManager = fuzz::Fuzzer::GetInstance()->GetContextManager();
-        if (contextManager->IsInitialized())
-        {
-            VerifyOrDie(CHIP_NO_ERROR == contextManager->Update(chip::Optional<bool>::Value(false), chip::NullOptional));
-            return;
-        }
+        VerifyOrDie(CHIP_NO_ERROR == contextManager->NotifyResponse());
     }
+    else
     {
-        std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
-        mWaitingForResponse = false;
+        {
+            std::lock_guard<std::mutex> lk(cvWaitingForResponseMutex);
+            mWaitingForResponse = false;
+        }
+        cvWaitingForResponse.notify_all();
     }
-    cvWaitingForResponse.notify_all();
 #else  // CONFIG_USE_SEPARATE_EVENTLOOP
     LogErrorOnFailure(chip::DeviceLayer::PlatformMgr().StopEventLoopTask());
 #endif // CONFIG_USE_SEPARATE_EVENTLOOP
