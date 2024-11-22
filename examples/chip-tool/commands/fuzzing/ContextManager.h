@@ -66,6 +66,7 @@ public:
     CHIP_ERROR OnNonInvokeRequest(chip::NodeId dst);
     CHIP_ERROR OnNonInvokeResponse();
     CHIP_ERROR OnSubscriptionReport(utils::DataAttributePathSet & attrs);
+    CHIP_ERROR OnInvokeResponseTimeout();
 
     CHIP_ERROR Close(bool log = false);
 

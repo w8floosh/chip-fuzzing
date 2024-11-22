@@ -20,7 +20,7 @@ V * ReadValueOrNull(std::unordered_map<K, V> & map, K id)
 
 // Variadic variant of ReadValueOrNull
 template <typename Map, typename K>
-auto * ReadValueOrNull(Map & map, const K & id)
+auto * ReadValueOrNull(Map & map, const K id)
 {
     auto found      = map.find(id);
     using ValueType = decltype(found->second);
@@ -29,7 +29,7 @@ auto * ReadValueOrNull(Map & map, const K & id)
 }
 
 template <typename Map, typename K, typename... Path>
-auto * ReadValueOrNull(Map & map, const K & id, const Path &... ids)
+auto * ReadValueOrNull(Map & map, const K id, const Path... ids)
 {
     auto found      = map.find(id);
     using ValueType = decltype(found->second);
@@ -38,24 +38,26 @@ auto * ReadValueOrNull(Map & map, const K & id, const Path &... ids)
 }
 // This sets a default value to a key in a map if it doesn't already exist, then returns it
 template <typename Map, typename K>
-auto & ReadValueOrDefault(Map & map, const K & id)
+auto & ReadValueOrDefault(Map * map, const K id)
 {
-    return map[id];
+    VerifyOrDie(map != nullptr);
+    return (*map)[id];
 }
 template <typename Map, typename K, typename... Path>
-auto & ReadValueOrDefault(Map & map, const K & id, const Path &... ids)
+auto & ReadValueOrDefault(Map * map, const K id, const Path... ids)
 {
-    return ReadValueOrDefault(map[id], ids...);
+    VerifyOrDie(map != nullptr);
+    return ReadValueOrDefault((*map)[id], ids...);
 }
 
 // This sets a default value to a key in a map if it doesn't already exist, then returns it
 template <typename Map, typename K, typename V>
-bool WriteValue(Map & map, const K & id, const V & aValue)
+bool WriteValue(Map & map, const K id, const V & aValue)
 {
     return map.emplace(id, aValue)->second;
 }
 template <typename Map, typename K, typename V, typename... Path>
-bool WriteValue(Map & map, const K & id, const Path &... ids, const V & aValue)
+bool WriteValue(Map & map, const K id, const Path... ids, const V & aValue)
 {
     return WriteValue(map[id], ids...);
 }
@@ -189,14 +191,15 @@ const fuzz::AnyType & fuzz::DeviceStateTracker::ReadAttribute(NodeId node, Endpo
 fuzz::AttributeState & fuzz::DeviceStateTracker::GetAttributeState(NodeId node, EndpointId endpoint, ClusterId cluster,
                                                                    AttributeId attribute)
 {
-    return ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
+    return ReadValueOrDefault(&mDeviceState(node, endpoint, cluster)->attributes, attribute);
 }
 
 void fuzz::DeviceStateTracker::WriteAttribute(NodeId node, EndpointId endpoint, ClusterId cluster, AttributeId attribute,
                                               AnyType && aValue)
 {
     VerifyOrDie(mDeviceState(node, endpoint, cluster) != nullptr);
-    AttributeState & attributeState = ReadValueOrDefault(mDeviceState(node, endpoint, cluster)->attributes, attribute);
+    AttributeState & attributeState = ReadValueOrDefault(&mDeviceState(node, endpoint, cluster)->attributes, attribute);
     attributeState.Write(std::move(aValue));
 }
 
@@ -211,42 +214,33 @@ void fuzz::DeviceStateTracker::Add(NodeId node)
 void fuzz::DeviceStateTracker::Add(NodeId node, BasicInformation aInfo)
 {
     if (mDeviceState(node) == nullptr)
-    {
         Add(node);
-    }
+
     BasicInformation & nodeInfo = mDeviceState(node)->nodeInfo;
-    if (!nodeInfo.dmRevision)
-    {
+
+    if (!nodeInfo.dmRevision.has_value())
         nodeInfo.dmRevision = aInfo.dmRevision;
-    }
-    if (!nodeInfo.vendorId)
-    {
+
+    if (!nodeInfo.vendorId.has_value())
         nodeInfo.vendorId = aInfo.vendorId;
-    }
-    if (!nodeInfo.hwVersion)
-    {
+
+    if (!nodeInfo.hwVersion.has_value())
         nodeInfo.hwVersion = aInfo.hwVersion;
-    }
-    if (!nodeInfo.productId)
-    {
+
+    if (!nodeInfo.productId.has_value())
         nodeInfo.productId = aInfo.productId;
-    }
-    if (!nodeInfo.swVersion)
-    {
+
+    if (!nodeInfo.swVersion.has_value())
         nodeInfo.swVersion = aInfo.swVersion;
-    }
-    if (nodeInfo.vendorName == "")
-    {
+
+    if (!nodeInfo.vendorName.has_value())
         nodeInfo.vendorName = aInfo.vendorName;
-    }
-    if (nodeInfo.manufacturingDate == "")
-    {
+
+    if (!nodeInfo.manufacturingDate.has_value())
         nodeInfo.manufacturingDate = aInfo.manufacturingDate;
-    }
-    if (nodeInfo.serialNumber == "")
-    {
+
+    if (!nodeInfo.serialNumber.has_value())
         nodeInfo.serialNumber = aInfo.serialNumber;
-    }
 }
 
 void fuzz::DeviceStateTracker::Add(NodeId node, EndpointId endpoint)

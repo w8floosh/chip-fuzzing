@@ -83,6 +83,9 @@ void fuzz::CallbackInterceptor::ProcessReportData(const chip::app::EventHeader &
 void fuzz::CallbackInterceptor::AnalyzeReportError(const chip::app::ConcreteDataAttributePath & path,
                                                    const chip::app::StatusIB & status)
 {
+    if (path.mClusterId == chip::app::Clusters::BasicInformation::Id || path.mClusterId == chip::app::Clusters::Descriptor::Id)
+        return;
+
     auto fuzzer           = fuzz::Fuzzer::GetInstance();
     auto & attributeState = fuzzer->GetDeviceStateTracker()->GetAttributeState(fuzzer->CurrentDestination(), path.mEndpointId,
                                                                                path.mClusterId, path.mAttributeId);
