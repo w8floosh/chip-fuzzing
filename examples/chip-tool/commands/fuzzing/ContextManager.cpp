@@ -3,19 +3,6 @@
 #include "StateMonitor.h"
 #include <app/InteractionModelEngine.h>
 #include <thread>
-bool fuzz::ContextManager::WaitForResponse(std::chrono::system_clock::time_point & waitingUntil)
-{
-    ChipLogDetail(chipFuzzer, "Waiting for response...");
-    std::unique_lock<std::mutex> lk(*mContextMutex);
-    return mCvContextMutex->wait_until(lk, waitingUntil, [this]() { return !(*mContext->waitingForResponse); });
-}
-
-// fuzz::ContextStatus & fuzz::ContextManager::CurrentStatus()
-// {
-//     std::unique_lock<std::mutex> lk(*mContextMutex);
-//     VerifyOrDie(mContext != nullptr);
-//     return mContext->status;
-// }
 
 void fuzz::ContextManager::Initialize(std::condition_variable * cv, std::mutex * mutex, bool * waitingForResponse)
 {
@@ -151,6 +138,13 @@ exit:
     return err;
 }
 
+bool fuzz::ContextManager::WaitForResponse(std::chrono::system_clock::time_point & waitingUntil)
+{
+    ChipLogDetail(chipFuzzer, "Waiting for response...");
+    std::unique_lock<std::mutex> lk(*mContextMutex);
+    return mCvContextMutex->wait_until(lk, waitingUntil, [this]() { return !(*mContext->waitingForResponse); });
+}
+
 CHIP_ERROR fuzz::ContextManager::WaitForSubscriptionReport()
 {
     std::unique_lock<std::mutex> lk(*mContextMutex);
@@ -186,11 +180,36 @@ exit:
     return err;
 }
 
+CHIP_ERROR fuzz::ContextManager::OnInvokeResponseTimeout()
+{
+    std::unique_lock<std::mutex> lk(*mContextMutex);
+    CHIP_ERROR err = CHIP_ERROR_TIMEOUT;
+    VerifyOrDie(mContext->commandPath.HasValue());
+    auto commandPath                = mContext->commandPath.Value();
+    mContext->commandStatusResponse = CHIP_ERROR_TIMEOUT;
+
+    auto fuzzer = fuzz::Fuzzer::GetInstance();
+    auto oracleStatus =
+        fuzzer->GetOracle()->Consume(commandPath.mEndpointId, commandPath.mClusterId, commandPath.mCommandId, true, err);
+    if (oracleStatus == fuzz::OracleStatus::UNREACHABLE)
+    {
+        ChipLogError(chipFuzzer, "Double timeout detected. The node is unreachable or may have crashed.");
+        err = CHIP_ERROR_UNEXPECTED_EVENT;
+    }
+
+    *mContext->waitingForResponse = false;
+    ChipLogProgress(chipFuzzer, "Moving fuzzer context state to TERMINATED.");
+    mContext->status = ContextStatus::TERMINATED;
+    mCvContextMutex->notify_all();
+    return err;
+}
+
 CHIP_ERROR fuzz::ContextManager::Close(bool log)
 {
     std::unique_lock<std::mutex> lk(*mContextMutex);
     VerifyOrReturnError(mContext, CHIP_FUZZER_ERROR_UNINITIALIZED_CONTEXT);
-    VerifyOrReturnError(mContext->status == ContextStatus::TERMINATED, CHIP_FUZZER_ERROR_CONTEXT_LOCKED);
+    if (mContext->status != ContextStatus::TERMINATED)
+        mContext->status = ContextStatus::TERMINATED;
 
     auto stateMonitor = fuzz::Fuzzer::GetInstance()->GetStateMonitor();
     if (mContext->commandPath.HasValue() && log)

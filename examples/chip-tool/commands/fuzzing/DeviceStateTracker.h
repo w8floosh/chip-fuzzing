@@ -9,7 +9,7 @@ namespace fuzzing {
 class AttributeState
 {
 public:
-    AttributeState() {};
+    AttributeState() = default;
     // Copy constructor
     AttributeState(const AttributeState & other)
     {
@@ -121,14 +121,14 @@ struct EndpointState
 
 struct BasicInformation
 {
-    uint16_t dmRevision           = 0;
-    std::string vendorName        = "";
-    uint16_t vendorId             = 0;
-    uint16_t productId            = 0;
-    uint16_t hwVersion            = 0;
-    uint32_t swVersion            = 0;
-    std::string manufacturingDate = "";
-    std::string serialNumber      = "";
+    std::optional<uint16_t> dmRevision           = std::nullopt;
+    std::optional<std::string> vendorName        = std::nullopt;
+    std::optional<uint16_t> vendorId             = std::nullopt;
+    std::optional<uint16_t> productId            = std::nullopt;
+    std::optional<uint16_t> hwVersion            = std::nullopt;
+    std::optional<uint32_t> swVersion            = std::nullopt;
+    std::optional<std::string> manufacturingDate = std::nullopt;
+    std::optional<std::string> serialNumber      = std::nullopt;
 };
 
 struct NodeState

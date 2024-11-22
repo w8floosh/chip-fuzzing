@@ -438,7 +438,7 @@
             "args": [
                 "fuzzing",
                 "start",
-                "0xc",
+                "0xe",
                 "1000",
                 "out/debug/standalone/chip-fuzzer"
             ],

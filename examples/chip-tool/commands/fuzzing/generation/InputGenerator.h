@@ -14,9 +14,9 @@ public:
         mBaseLexerPath("examples/chip-tool/commands/fuzzing/generation/CommandLexer.g4"),
         mBaseParserPath("examples/chip-tool/commands/fuzzing/generation/CommandParser.g4")
     {
-        std::ostringstream filename(nodeInfo->vendorName, std::ios_base::ate);
-        filename << std::hex << "_" << nodeInfo->vendorId << "_" << nodeInfo->productId << "_" << nodeInfo->hwVersion << "_"
-                 << nodeInfo->swVersion << std::dec;
+        std::ostringstream filename(nodeInfo->vendorName.value_or("nan"), std::ios_base::ate);
+        filename << std::hex << "_" << nodeInfo->vendorId.value_or(0xFFFF) << "_" << nodeInfo->productId.value_or(0xFFFF) << "_"
+                 << nodeInfo->hwVersion.value_or(0xFFFF) << "_" << nodeInfo->swVersion.value_or(0xFFFFFFFF) << std::dec;
         if (!fs::exists(baseDir))
         {
             VerifyOrDie(fs::create_directories(baseDir));
