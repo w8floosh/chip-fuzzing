@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <app/MessageDef/StatusIB.h>
 #include <atomic>
+#include <csignal>
 #include <cstring>
 #include <future>
 #include <numeric>
@@ -79,12 +80,12 @@ void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
     }
 
     auto contextManager = fuzzer->GetContextManager();
-    LogErrorOnFailure(contextManager->WaitForSubscriptionReport());
+    if (CHIP_ERROR_TIMEOUT == *status)
+        *status = contextManager->OnInvokeResponseTimeout();
+    else if (CHIP_NO_ERROR == *status)
+        LogErrorOnFailure(contextManager->WaitForSubscriptionReport());
 
-    if (contextManager->IsInitialized())
-    {
-        VerifyOrDie(CHIP_NO_ERROR == contextManager->Close(needsLog));
-    }
+    VerifyOrDie(CHIP_NO_ERROR == contextManager->Close(needsLog));
 
     if (fuzzer->mCurrentPhase != fuzz::FuzzerPhase::INITIALIZATION && fuzzer->mCurrentPhase != fuzz::FuzzerPhase::ACQUISITION)
         fuzzer->AppendToHistory(command, *status);
@@ -284,7 +285,7 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     auto * endpointList = DeviceStateTracker->List(mDestinationId);
     VerifyOrReturnError(endpointList, CHIP_FUZZER_ERROR_NODE_SCAN_FAILED);
 
-    ReturnErrorOnFailure(AcquireBasicInformation());
+    LogErrorOnFailure(AcquireBasicInformation());
     mDestinationSupportsTCPServer = TestTCPServerSupport();
     ReturnErrorOnFailure(SubscribeAttributes());
 
@@ -303,6 +304,18 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
     fuzzer->GoToNextPhase();
 
     fuzzer->mTestId = 0x8000000000000000; // the first bit indicates it is an exploration test
+
+    // From here the fuzzer process can be aborted cleanly
+    std::signal(SIGINT, [](int signal) {
+        ChipLogProgress(chipFuzzer, "Received signal %d. Stopping the fuzzer...", signal);
+        auto fuzzer = fuzz::Fuzzer::GetInstance();
+        fuzzer->GetStateMonitor()->DumpTelemetry();
+        fuzzer->GetDeviceStateTracker()->Dump(fuzzer->mCommandHistory);
+        ChipLogProgress(chipFuzzer, "Fuzzing telemetry and device state was dumped in the output folder.");
+    });
+
+    std::signal(SIGTSTP, [](int signal) { ChipLogProgress(chipFuzzer, "Received signal %d. Pausing the fuzzer...", signal); });
+
     ReturnErrorOnFailure(AddOracleRules(chip::Optional<fs::path>::Value(dependencyTestcasesFile)));
     VerifyOrDie(fs::remove(dependencyTestcasesFile.c_str()));
     fuzzer->GoToNextPhase();

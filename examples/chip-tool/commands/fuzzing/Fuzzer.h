@@ -19,7 +19,7 @@ enum class FuzzerPhase : uint8_t
     INITIALIZATION,
     ACQUISITION,
     EXPLORATION,
-    TESTING
+    TESTING,
 };
 /**
  * @brief Generates mutated commands to test the CHIP device's behavior, as well as
@@ -74,7 +74,6 @@ private:
     Oracle mOracle;
     CallbackInterceptor mCallbackInterceptor;
     ContextManager mContextManager;
-    // TerminalUIManager mTerminalUIManager;
 
     Fuzzer(NodeId dst, fs::path outputDirectory, size_t tests, FuzzingCommand * executor);
     Fuzzer(const Fuzzer &)                 = delete;
@@ -101,7 +100,6 @@ private:
         VerifyOrReturn(mCurrentPhase != FuzzerPhase::TESTING);
         mCurrentPhase = static_cast<FuzzerPhase>((static_cast<uint8_t>(mCurrentPhase) + 1));
     }
-    void Cleanup();
 };
 
 } // namespace fuzzing

@@ -3,6 +3,7 @@
 #include "Utils.h"
 #include "Visitors.h"
 
+#include <csignal>
 #include <fstream>
 #include <map>
 #include <mutex>
@@ -46,5 +47,3 @@ CHIP_ERROR fuzz::Fuzzer::ExportSeedToFile(const char * command, const chip::app:
 
     return CHIP_NO_ERROR;
 }
-
-void fuzz::Fuzzer::Cleanup() {}
