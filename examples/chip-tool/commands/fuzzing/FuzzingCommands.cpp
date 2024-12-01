@@ -81,7 +81,7 @@ void FuzzingCommand::ExecuteCommand(const char * command, CHIP_ERROR * status)
 
     auto contextManager = fuzzer->GetContextManager();
     if (CHIP_ERROR_TIMEOUT == *status)
-        *status = contextManager->OnInvokeResponseTimeout();
+        *status = contextManager->OnResponseTimeout();
     else if (CHIP_NO_ERROR == *status)
         LogErrorOnFailure(contextManager->WaitForSubscriptionReport());
 
@@ -312,9 +312,8 @@ CHIP_ERROR FuzzingStartCommand::RunCommand()
         fuzzer->GetStateMonitor()->DumpTelemetry();
         fuzzer->GetDeviceStateTracker()->Dump(fuzzer->mCommandHistory);
         ChipLogProgress(chipFuzzer, "Fuzzing telemetry and device state was dumped in the output folder.");
+        exit(2);
     });
-
-    std::signal(SIGTSTP, [](int signal) { ChipLogProgress(chipFuzzer, "Received signal %d. Pausing the fuzzer...", signal); });
 
     ReturnErrorOnFailure(AddOracleRules(chip::Optional<fs::path>::Value(dependencyTestcasesFile)));
     VerifyOrDie(fs::remove(dependencyTestcasesFile.c_str()));

@@ -180,21 +180,23 @@ exit:
     return err;
 }
 
-CHIP_ERROR fuzz::ContextManager::OnInvokeResponseTimeout()
+CHIP_ERROR fuzz::ContextManager::OnResponseTimeout()
 {
     std::unique_lock<std::mutex> lk(*mContextMutex);
-    CHIP_ERROR err = CHIP_ERROR_TIMEOUT;
-    VerifyOrDie(mContext->commandPath.HasValue());
-    auto commandPath                = mContext->commandPath.Value();
+    CHIP_ERROR err                  = CHIP_ERROR_TIMEOUT;
     mContext->commandStatusResponse = CHIP_ERROR_TIMEOUT;
 
     auto fuzzer = fuzz::Fuzzer::GetInstance();
-    auto oracleStatus =
-        fuzzer->GetOracle()->Consume(commandPath.mEndpointId, commandPath.mClusterId, commandPath.mCommandId, true, err);
-    if (oracleStatus == fuzz::OracleStatus::UNREACHABLE)
+    if (mContext->commandPath.HasValue())
     {
-        ChipLogError(chipFuzzer, "Double timeout detected. The node is unreachable or may have crashed.");
-        err = CHIP_ERROR_UNEXPECTED_EVENT;
+        auto commandPath = mContext->commandPath.Value();
+        auto oracleStatus =
+            fuzzer->GetOracle()->Consume(commandPath.mEndpointId, commandPath.mClusterId, commandPath.mCommandId, true, err);
+        if (oracleStatus == fuzz::OracleStatus::UNREACHABLE)
+        {
+            ChipLogError(chipFuzzer, "Double timeout detected. The node is unreachable or may have crashed.");
+            err = CHIP_ERROR_UNEXPECTED_EVENT;
+        }
     }
 
     *mContext->waitingForResponse = false;
